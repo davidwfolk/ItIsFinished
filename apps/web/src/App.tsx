@@ -21,7 +21,8 @@ import {
   Filter,
   ListTree,
   Grid,
-  Edit2
+  Edit2,
+  Timer
 } from 'lucide-react';
 import { CalendarTimeGrid } from './components/CalendarTimeGrid';
 import { AuthModal } from './components/AuthModal';
@@ -33,6 +34,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
 import { ProjectModal } from './components/ProjectModal';
 import { TaskDetailDrawer } from './components/TaskDetailDrawer';
+import { FocusTimerView } from './components/FocusTimerView';
 
 export interface ViewTask {
   id: string;
@@ -52,7 +54,8 @@ export interface ViewTask {
 
 export default function App() {
   const powersync = usePowerSync();
-  const [activeTab, setActiveTab] = useState<'today' | 'calendar' | 'matrix' | 'analytics'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'calendar' | 'matrix' | 'analytics' | 'focus'>('today');
+  const [focusLinkedTaskId, setFocusLinkedTaskId] = useState<string | null>(null);
   const [quickAddText, setQuickAddText] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
@@ -446,6 +449,22 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => { setActiveTab('focus'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
+              activeTab === 'focus'
+                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
+                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Timer className="h-4 w-4" /> Focus Engine
+            </span>
+            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-semibold">
+              25m
+            </span>
+          </button>
+
+          <button
             onClick={() => { setActiveTab('analytics'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
               activeTab === 'analytics'
@@ -600,6 +619,8 @@ export default function App() {
           />
         ) : activeTab === 'analytics' ? (
           <AnalyticsDashboard />
+        ) : activeTab === 'focus' ? (
+          <FocusTimerView initialTaskId={focusLinkedTaskId} />
         ) : (
           <>
             {/* Header */}
@@ -855,6 +876,11 @@ export default function App() {
         projects={rawProjects}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={deleteTask}
+        onStartFocus={(taskId) => {
+          setFocusLinkedTaskId(taskId);
+          setSelectedTaskId(null);
+          setActiveTab('focus');
+        }}
       />
 
       {/* Create / Edit Project Modal */}

@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Sparkles,
   Send,
-  User
+  User,
+  Timer
 } from 'lucide-react';
 import type { TaskRow } from '@app/core';
 import { SubtaskTree } from './SubtaskTree';
@@ -36,6 +37,7 @@ export interface TaskDetailDrawerProps {
   projects: { id: string; name: string; color?: string | null }[];
   onUpdateTask: (id: string, updates: Partial<TaskRow>) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
+  onStartFocus?: (taskId: string) => void;
 }
 
 export function TaskDetailDrawer({
@@ -46,6 +48,7 @@ export function TaskDetailDrawer({
   projects,
   onUpdateTask,
   onDeleteTask,
+  onStartFocus,
 }: TaskDetailDrawerProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -176,6 +179,17 @@ export function TaskDetailDrawer({
           </div>
 
           <div className="flex items-center gap-2">
+            {onStartFocus && (
+              <button
+                onClick={() => {
+                  onStartFocus(taskId);
+                  onClose();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-xs font-semibold text-orange-400 flex items-center gap-1.5 transition"
+              >
+                <Timer className="h-3.5 w-3.5" /> Start Focus
+              </button>
+            )}
             <button
               onClick={handleDelete}
               title="Delete Task"
