@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { parseQuickAdd, getOrderIndexBetween, DEFAULT_SMART_FILTERS, type ParsedTaskInput, type SavedSmartFilter, type TaskRow } from '@app/core';
+import { parseQuickAdd, getOrderIndexBetween, DEFAULT_SMART_FILTERS, type ParsedTaskInput, type SavedSmartFilter, type TaskRow, type ProjectRow } from '@app/core';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { 
   CheckCircle2, 
@@ -20,7 +20,8 @@ import {
   TrendingUp,
   Filter,
   ListTree,
-  Grid
+  Grid,
+  Edit2
 } from 'lucide-react';
 import { CalendarTimeGrid } from './components/CalendarTimeGrid';
 import { AuthModal } from './components/AuthModal';
@@ -30,6 +31,8 @@ import { SmartFilterModal } from './components/SmartFilterModal';
 import { SubtaskTree } from './components/SubtaskTree';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
+import { ProjectModal } from './components/ProjectModal';
+import { TaskDetailDrawer } from './components/TaskDetailDrawer';
 
 export interface ViewTask {
   id: string;
@@ -40,6 +43,8 @@ export interface ViewTask {
   estimated_minutes: number | null;
   priority: 1 | 2 | 3 | 4;
   project: string;
+  project_id?: string | null;
+  description?: string | null;
   tags: string[];
   completed: boolean;
   hasSubtasks?: boolean;
@@ -51,6 +56,12 @@ export default function App() {
   const [quickAddText, setQuickAddText] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
+
+  // Project & Task Selection State
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectRow | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   // Modals & Drawers State
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -65,7 +76,17 @@ export default function App() {
     name: 'You (Alex)'
   });
 
-  // Live Reactive SQLite Query
+  // Live Reactive SQLite Projects Query with Task Counts
+  const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
+    `SELECT p.*, count(t.id) as task_count 
+     FROM projects p 
+     LEFT JOIN tasks t ON t.project_id = p.id AND t.completed_at IS NULL AND t.deleted_at IS NULL 
+     WHERE p.deleted_at IS NULL 
+     GROUP BY p.id 
+     ORDER BY p.order_index ASC`
+  );
+
+  // Live Reactive SQLite Tasks Query
   const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
     `SELECT t.*, p.name as project_name 
      FROM tasks t 
@@ -79,22 +100,93 @@ export default function App() {
     return rawTasks.map((t) => ({
       id: t.id,
       title: t.title,
+      description: t.description,
       order_index: t.order_index,
       due_date: t.due_date,
       due_time: t.due_time,
       estimated_minutes: t.estimated_minutes,
       priority: (t.priority || 4) as 1 | 2 | 3 | 4,
       project: t.project_name || 'Inbox',
+      project_id: t.project_id,
       tags: [],
       completed: !!t.completed_at || t.status === 'done',
       hasSubtasks: false,
     }));
   }, [rawTasks]);
 
+  // Selected Task for TaskDetailDrawer
+  const selectedTask = useMemo(() => {
+    return tasks.find(t => t.id === selectedTaskId) || null;
+  }, [tasks, selectedTaskId]);
+
+  // Selected Project Details
+  const selectedProject = useMemo(() => {
+    return rawProjects.find(p => p.id === selectedProjectId) || null;
+  }, [rawProjects, selectedProjectId]);
+
+  // Filtered Task List based on active selection (Project vs Today vs Filter)
+  const displayTasks = useMemo(() => {
+    if (selectedProjectId) {
+      return tasks.filter(t => t.project_id === selectedProjectId);
+    }
+    return tasks;
+  }, [tasks, selectedProjectId]);
+
   // Real-time live NLP extraction as user types
   const parsedPreview: ParsedTaskInput = useMemo(() => {
     return parseQuickAdd(quickAddText);
   }, [quickAddText]);
+
+  const handleSaveProject = async (name: string, color: string, icon: string) => {
+    const now = new Date().toISOString();
+    try {
+      if (editingProject) {
+        await powersync.execute(
+          `UPDATE projects SET name = ?, color = ?, icon = ?, updated_at = ? WHERE id = ?`,
+          [name, color, icon, now, editingProject.id]
+        );
+      } else {
+        const newId = `proj-${crypto.randomUUID().slice(0, 8)}`;
+        await powersync.execute(
+          `INSERT INTO projects (id, owner_id, name, color, icon, order_index, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newId, 'demo-user', name, color, icon, 'a0', now, now]
+        );
+        setSelectedProjectId(newId);
+        setActiveTab('today');
+      }
+      setEditingProject(null);
+    } catch (err) {
+      console.error('Failed to save project in SQLite:', err);
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(`UPDATE projects SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+      if (selectedProjectId === id) setSelectedProjectId(null);
+    } catch (err) {
+      console.error('Failed to delete project in SQLite:', err);
+    }
+  };
+
+  const handleUpdateTask = async (id: string, updates: Partial<TaskRow>) => {
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return;
+    const setClauses = keys.map(k => `${k} = ?`).join(', ');
+    const values = keys.map(k => (updates as any)[k]);
+    const now = new Date().toISOString();
+
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET ${setClauses}, updated_at = ? WHERE id = ?`,
+        [...values, now, id]
+      );
+    } catch (err) {
+      console.error('Failed to update task in SQLite:', err);
+    }
+  };
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,9 +398,9 @@ export default function App() {
 
         <nav className="space-y-1 flex-1 text-sm font-medium overflow-y-auto pr-1">
           <button
-            onClick={() => { setActiveTab('today'); setSelectedFilterId(null); }}
+            onClick={() => { setActiveTab('today'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'today' && !selectedFilterId
+              activeTab === 'today' && !selectedProjectId && !selectedFilterId
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -322,7 +414,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('calendar'); setSelectedFilterId(null); }}
+            onClick={() => { setActiveTab('calendar'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
               activeTab === 'calendar'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
@@ -338,7 +430,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('matrix'); setSelectedFilterId(null); }}
+            onClick={() => { setActiveTab('matrix'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
               activeTab === 'matrix'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
@@ -354,7 +446,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('analytics'); setSelectedFilterId(null); }}
+            onClick={() => { setActiveTab('analytics'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
               activeTab === 'analytics'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
@@ -378,8 +470,63 @@ export default function App() {
             </span>
           </button>
 
-          {/* Smart Filters Section */}
+          {/* Projects Section */}
           <div className="pt-4 pb-1">
+            <div className="flex items-center justify-between px-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider font-mono">
+              <span>Projects</span>
+              <button
+                onClick={() => { setEditingProject(null); setProjectModalOpen(true); }}
+                title="Create Project"
+                className="hover:text-blue-400 p-0.5 rounded hover:bg-zinc-800 transition"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="space-y-0.5 mt-1.5">
+              {rawProjects.map(project => (
+                <div
+                  key={project.id}
+                  className={`group w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition cursor-pointer ${
+                    selectedProjectId === project.id
+                      ? 'bg-blue-600/15 text-blue-300 font-semibold border border-blue-500/20'
+                      : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                  }`}
+                  onClick={() => {
+                    setSelectedProjectId(project.id);
+                    setSelectedFilterId(null);
+                    setActiveTab('today');
+                  }}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <span style={{ backgroundColor: project.color || '#3B82F6' }} className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" />
+                    <span className="truncate">{project.name}</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 font-semibold">
+                      {project.task_count || 0}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingProject(project);
+                        setProjectModalOpen(true);
+                      }}
+                      title="Edit Project"
+                      className="opacity-0 group-hover:opacity-100 hover:text-blue-400 p-0.5 transition"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {rawProjects.length === 0 && (
+                <div className="px-2 py-2 text-xs text-zinc-500 italic">No projects yet</div>
+              )}
+            </div>
+          </div>
+
+          {/* Smart Filters Section */}
+          <div className="pt-3 pb-1">
             <div className="flex items-center justify-between px-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider font-mono">
               <span>Saved Filters</span>
               <button
@@ -390,12 +537,13 @@ export default function App() {
                 <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="space-y-1 mt-2">
+            <div className="space-y-1 mt-1.5">
               {smartFilters.map(filter => (
                 <button
                   key={filter.id}
                   onClick={() => {
                     setSelectedFilterId(filter.id);
+                    setSelectedProjectId(null);
                     setActiveTab('today');
                   }}
                   className={`w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
@@ -455,26 +603,68 @@ export default function App() {
         ) : (
           <>
             {/* Header */}
-            <header className="h-14 border-b border-zinc-800/80 px-8 flex items-center justify-between bg-zinc-950">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  {selectedFilterId 
-                    ? smartFilters.find(f => f.id === selectedFilterId)?.name 
-                    : "Today's Focus"}
-                </h2>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-                  Drag ↕ to reorder with Fractional Indexing
-                </span>
+            <header className="border-b border-zinc-800/80 px-8 py-3 bg-zinc-950 flex flex-col justify-center">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {selectedProject ? (
+                    <div className="flex items-center gap-2.5">
+                      <span style={{ backgroundColor: selectedProject.color || '#3B82F6' }} className="w-3.5 h-3.5 rounded-full shadow-sm shrink-0" />
+                      <h2 className="text-lg font-bold tracking-tight text-zinc-100">{selectedProject.name}</h2>
+                      <button
+                        onClick={() => { setEditingProject(selectedProject); setProjectModalOpen(true); }}
+                        title="Edit Project"
+                        className="p-1 text-zinc-500 hover:text-zinc-200 rounded hover:bg-zinc-800 transition"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <h2 className="text-lg font-semibold tracking-tight text-zinc-100">
+                      {selectedFilterId 
+                        ? smartFilters.find(f => f.id === selectedFilterId)?.name 
+                        : "Today's Focus"}
+                    </h2>
+                  )}
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                    {displayTasks.length} {displayTasks.length === 1 ? 'task' : 'tasks'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedProject && (
+                    <button
+                      onClick={() => { setEditingProject(selectedProject); setProjectModalOpen(true); }}
+                      className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 flex items-center gap-1.5 transition font-medium"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-zinc-400" /> Project Settings
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setMembersModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 flex items-center gap-1.5 transition font-medium"
+                  >
+                    <Users className="h-3.5 w-3.5 text-blue-400" /> Share Project
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setMembersModalOpen(true)}
-                  className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 flex items-center gap-1.5 transition font-medium"
-                >
-                  <Users className="h-3.5 w-3.5 text-blue-400" /> Share Project
-                </button>
-              </div>
+              {/* Project Progress Bar */}
+              {selectedProject && displayTasks.length > 0 && (
+                <div className="mt-2.5 flex items-center gap-3">
+                  <div className="flex-1 h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                    <div 
+                      style={{ 
+                        width: `${Math.round((displayTasks.filter(t => t.completed).length / displayTasks.length) * 100)}%`,
+                        backgroundColor: selectedProject.color || '#3B82F6'
+                      }}
+                      className="h-full rounded-full transition-all duration-300"
+                    />
+                  </div>
+                  <span className="text-[11px] font-mono text-zinc-400 font-semibold">
+                    {displayTasks.filter(t => t.completed).length}/{displayTasks.length} ({Math.round((displayTasks.filter(t => t.completed).length / displayTasks.length) * 100)}%)
+                  </span>
+                </div>
+              )}
             </header>
 
             {/* Tasks Container */}
@@ -488,7 +678,7 @@ export default function App() {
                       type="text"
                       value={quickAddText}
                       onChange={(e) => setQuickAddText(e.target.value)}
-                      placeholder="Quick add: 'Ship MVP tomorrow at 3pm for 45m #Core /Sprint1 @urgent p1'"
+                      placeholder={selectedProject ? `Quick add to #${selectedProject.name}: 'Review specs tomorrow 30m p1'` : "Quick add: 'Ship MVP tomorrow at 3pm for 45m #Core @urgent p1'"}
                       className="w-full bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
                     />
                     <button
@@ -536,7 +726,7 @@ export default function App() {
 
               {/* Draggable Task List */}
               <div className="space-y-3">
-                {tasks.map((task) => (
+                {displayTasks.map((task) => (
                   <div key={task.id} className="space-y-2">
                     <div
                       draggable
@@ -548,7 +738,10 @@ export default function App() {
                       <GripVertical className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 mt-0.5 shrink-0" />
 
                       <button
-                        onClick={() => toggleTask(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTask(task.id);
+                        }}
                         className="mt-0.5 text-zinc-500 hover:text-blue-400 transition shrink-0"
                       >
                         {task.completed ? (
@@ -558,9 +751,13 @@ export default function App() {
                         )}
                       </button>
 
-                      <div className="flex-1 min-w-0">
+                      {/* Task Body (Click to open TaskDetailDrawer) */}
+                      <div 
+                        onClick={() => setSelectedTaskId(task.id)}
+                        className="flex-1 min-w-0 cursor-pointer"
+                      >
                         <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${task.completed ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                          <span className={`text-sm font-medium hover:text-blue-300 transition ${task.completed ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
                             {task.title}
                           </span>
                           <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${priorityColors[task.priority]}`}>
@@ -596,21 +793,30 @@ export default function App() {
                       <div className="flex items-center gap-1">
                         {/* Subtask Expander Toggle */}
                         <button
-                          onClick={() => setExpandedSubtaskId(expandedSubtaskId === task.id ? null : task.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedSubtaskId(expandedSubtaskId === task.id ? null : task.id);
+                          }}
                           title="Toggle Subtask Tree"
                           className={`p-1 transition ${expandedSubtaskId === task.id ? 'text-purple-400' : 'text-zinc-500 hover:text-purple-400'}`}
                         >
                           <ListTree className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => setActiveCommentTask(task)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveCommentTask(task);
+                          }}
                           title="Discussion & Comments"
                           className="p-1 hover:text-blue-400 text-zinc-500 transition"
                         >
                           <MessageSquare className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => deleteTask(task.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteTask(task.id);
+                          }}
                           title="Delete Task"
                           className="p-1 hover:text-red-400 text-zinc-600 transition"
                         >
@@ -627,11 +833,38 @@ export default function App() {
                     )}
                   </div>
                 ))}
+
+                {displayTasks.length === 0 && (
+                  <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl p-8 space-y-2">
+                    <p className="text-sm text-zinc-400 font-medium">No tasks in this view</p>
+                    <p className="text-xs text-zinc-600">Use the quick add bar above to create your first task!</p>
+                  </div>
+                )}
               </div>
             </div>
           </>
         )}
       </main>
+
+      {/* Task Detail & Edit Slide-Over Drawer */}
+      <TaskDetailDrawer
+        isOpen={!!selectedTaskId}
+        onClose={() => setSelectedTaskId(null)}
+        taskId={selectedTaskId}
+        task={selectedTask}
+        projects={rawProjects}
+        onUpdateTask={handleUpdateTask}
+        onDeleteTask={deleteTask}
+      />
+
+      {/* Create / Edit Project Modal */}
+      <ProjectModal
+        isOpen={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        project={editingProject}
+        onSave={handleSaveProject}
+        onDelete={handleDeleteProject}
+      />
 
       {/* Auth Modal */}
       <AuthModal
@@ -644,7 +877,7 @@ export default function App() {
       <ProjectMembersModal
         isOpen={membersModalOpen}
         onClose={() => setMembersModalOpen(false)}
-        projectName="Core Architecture"
+        projectName={selectedProject?.name || "Core Architecture"}
       />
 
       {/* Smart Filter Builder Modal */}
@@ -654,6 +887,7 @@ export default function App() {
         onSaveFilter={(filter) => {
           setSmartFilters([...smartFilters, filter]);
           setSelectedFilterId(filter.id);
+          setSelectedProjectId(null);
         }}
       />
 
