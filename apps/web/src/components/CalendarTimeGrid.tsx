@@ -41,6 +41,7 @@ export function CalendarTimeGrid() {
   const powersync = usePowerSync();
   // Current view reference date (defaults to current week)
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'workweek' | 'fullweek'>('fullweek');
 
   // Live Query from PowerSync SQLite
   const { data: dbTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
@@ -51,7 +52,7 @@ export function CalendarTimeGrid() {
      ORDER BY t.order_index ASC`
   );
 
-  // Compute the 5 days (Mon-Fri) for the currently selected week
+  // Compute the days for the currently selected week
   const weekDays = useMemo(() => {
     const d = new Date(currentDate);
     const dayOfWeek = d.getDay(); // 0 is Sun, 1 is Mon...
@@ -62,8 +63,9 @@ export function CalendarTimeGrid() {
 
     const days = [];
     const todayStr = new Date().toISOString().split('T')[0];
+    const totalDays = viewMode === 'workweek' ? 5 : 7;
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < totalDays; i++) {
       const dayDate = new Date(monday);
       dayDate.setDate(monday.getDate() + i);
 
@@ -74,10 +76,11 @@ export function CalendarTimeGrid() {
         name,
         isToday: dateStr === todayStr,
         dayIndex: i,
+        rawDate: dayDate,
       });
     }
     return days;
-  }, [currentDate]);
+  }, [currentDate, viewMode]);
 
   // Derived tasks from SQLite query
   const inboxTasks: InboxTask[] = useMemo(() => {
@@ -133,6 +136,21 @@ export function CalendarTimeGrid() {
   const handleJumpToToday = () => {
     setCurrentDate(new Date());
   };
+
+  // Week Date Range Title (e.g. "Aug 24 – Aug 30, 2026")
+  const weekRangeTitle = useMemo(() => {
+    if (weekDays.length === 0) return '';
+    const firstDay = weekDays[0].rawDate;
+    const lastDay = weekDays[weekDays.length - 1].rawDate;
+    
+    const startStr = firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endStr = lastDay.toLocaleDateString('en-US', { 
+      month: firstDay.getMonth() === lastDay.getMonth() ? undefined : 'short', 
+      day: 'numeric',
+      year: 'numeric' 
+    });
+    return `${startStr} – ${endStr}`;
+  }, [weekDays]);
 
   // Convert time to pixels (60px = 1 hour)
   const getTopOffset = (startTime: string) => {
@@ -239,7 +257,6 @@ export function CalendarTimeGrid() {
     }
   };
 
-  const monthYearTitle = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div className="flex h-full w-full bg-zinc-950 overflow-hidden">
@@ -304,7 +321,7 @@ export function CalendarTimeGrid() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-3 font-semibold text-zinc-100">{monthYearTitle}</span>
+              <span className="px-3 font-semibold text-zinc-100 min-w-[170px] text-center">{weekRangeTitle}</span>
               <button 
                 onClick={handleNextWeek}
                 title="Next Week"
@@ -319,6 +336,22 @@ export function CalendarTimeGrid() {
             >
               Today
             </button>
+
+            {/* View Mode Toggle: 5 Days vs 7 Days */}
+            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs font-mono">
+              <button
+                onClick={() => setViewMode('workweek')}
+                className={`px-2 py-0.5 rounded transition ${viewMode === 'workweek' ? 'bg-blue-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                5 Days
+              </button>
+              <button
+                onClick={() => setViewMode('fullweek')}
+                className={`px-2 py-0.5 rounded transition ${viewMode === 'fullweek' ? 'bg-blue-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                7 Days
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
