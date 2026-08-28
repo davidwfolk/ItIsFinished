@@ -23,6 +23,7 @@ export interface TaskItemProps {
   orderIndex: string;
   onToggleComplete: (id: string) => void;
   onReschedule?: (id: string) => void;
+  onPress?: (id: string) => void;
 }
 
 export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
@@ -38,6 +39,7 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
   orderIndex,
   onToggleComplete,
   onReschedule,
+  onPress,
 }) => {
   const translateX = useSharedValue(0);
 
@@ -105,7 +107,10 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
             />
           </Pressable>
 
-          <View style={styles.contentContainer}>
+          <Pressable 
+            onPress={() => onPress && onPress(id)}
+            style={styles.contentContainer}
+          >
             <View style={styles.titleRow}>
               <Text
                 style={[
@@ -153,7 +158,7 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
                 </Text>
               ))}
             </View>
-          </View>
+          </Pressable>
         </Animated.View>
       </GestureDetector>
     </View>

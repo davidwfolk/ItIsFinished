@@ -10,12 +10,26 @@ import {
 } from 'react-native';
 import { SwipeableTaskItem, type TaskItemProps } from '../../src/components/SwipeableTaskItem';
 import { QuickAddModal } from '../../src/components/QuickAddModal';
+import { TaskDetailModal } from '../../src/components/TaskDetailModal';
+import { ProjectPickerModal, type ProjectItem } from '../../src/components/ProjectPickerModal';
 import { getOrderIndexBetween, type ParsedTaskInput } from '@app/core';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { type CompressedAttachment } from '../../src/lib/imageCompressor';
 
 export default function TodayScreen() {
   const [quickAddVisible, setQuickAddVisible] = useState(false);
+  const [projectPickerVisible, setProjectPickerVisible] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskItemProps | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const [projects, setProjects] = useState<ProjectItem[]>([
+    { id: 'proj-core-arch', name: 'Core Architecture', color: '#3B82F6', taskCount: 2 },
+    { id: 'proj-mobile-ux', name: 'Mobile UX', color: '#8B5CF6', taskCount: 1 },
+    { id: 'proj-media', name: 'Media Storage', color: '#10B981', taskCount: 1 },
+  ]);
+
   const [tasks, setTasks] = useState<TaskItemProps[]>([
     {
       id: '1',
@@ -77,16 +91,62 @@ export default function TodayScreen() {
     );
   };
 
-  const handleAddTask = (parsed: ParsedTaskInput, attachment: CompressedAttachment | null) => {
+  const handleOpenDetail = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const target = tasks.find(t => t.id === id) || null;
+    setSelectedTask(target);
+    setDetailModalVisible(true);
+  };
+
+  const handleUpdateTask = (id: string, updates: any) => {
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id === id) {
+          const matchingProj = projects.find(p => p.id === updates.project_id);
+          return {
+            ...t,
+            ...updates,
+            project: matchingProj ? matchingProj.name : t.project,
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const handleDeleteTask = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleCreateProject = (name: string, color: string) => {
+    const newProj: ProjectItem = {
+      id: `proj-${Date.now()}`,
+      name,
+      color,
+      taskCount: 0,
+    };
+    setProjects(prev => [...prev, newProj]);
+    setSelectedProjectId(newProj.id);
+  };
+
+  const handleDeleteProject = (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+    if (selectedProjectId === id) setSelectedProjectId(null);
+  };
+
+  const handleAddTask = (parsed: ParsedTaskInput, _attachment: CompressedAttachment | null) => {
     const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].orderIndex : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
+
+    const activeProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
+    const finalProjectName = parsed.projectName || (activeProject ? activeProject.name : 'Inbox');
 
     const newTask: TaskItemProps = {
       id: String(Date.now()),
       title: parsed.title,
       completed: false,
       priority: parsed.priority,
-      project: parsed.projectName || 'Inbox',
+      project: finalProjectName,
       dueDate: parsed.dueDate,
       dueTime: parsed.dueTime,
       estimatedMinutes: parsed.estimatedMinutes,
@@ -98,28 +158,43 @@ export default function TodayScreen() {
     setTasks(prev => [...prev, newTask]);
   };
 
-  const activeCount = tasks.filter(t => !t.completed).length;
+  const currentProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
+  const filteredTasks = currentProject ? tasks.filter(t => t.project === currentProject.name) : tasks;
+  const activeCount = filteredTasks.filter(t => !t.completed).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Today's Focus</Text>
+          <TouchableOpacity 
+            onPress={() => setProjectPickerVisible(true)}
+            style={styles.headerTitleContainer}
+            activeOpacity={0.7}
+          >
+            <View style={styles.headerTitleRow}>
+              {currentProject && (
+                <View style={[styles.projectDot, { backgroundColor: currentProject.color || '#3B82F6' }]} />
+              )}
+              <Text style={styles.headerTitle}>
+                {currentProject ? currentProject.name : "Today's Focus"}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#71717A" />
+            </View>
             <Text style={styles.headerSubtitle}>
               {activeCount} tasks remaining • 0ms Local SQLite
             </Text>
-          </View>
+          </TouchableOpacity>
+
           <View style={styles.cloudBadge}>
             <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-            <Text style={styles.cloudText}>Supabase</Text>
+            <Text style={styles.cloudText}>Local-First</Text>
           </View>
         </View>
 
         {/* Task List */}
         <FlatList
-          data={tasks}
+          data={filteredTasks}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -127,6 +202,7 @@ export default function TodayScreen() {
             <SwipeableTaskItem
               {...item}
               onToggleComplete={toggleTask}
+              onPress={handleOpenDetail}
             />
           )}
         />
@@ -145,6 +221,27 @@ export default function TodayScreen() {
           visible={quickAddVisible}
           onClose={() => setQuickAddVisible(false)}
           onAddTask={handleAddTask}
+        />
+
+        {/* Task Detail Modal */}
+        <TaskDetailModal
+          visible={detailModalVisible}
+          onClose={() => setDetailModalVisible(false)}
+          task={selectedTask}
+          projects={projects}
+          onUpdateTask={handleUpdateTask}
+          onDeleteTask={handleDeleteTask}
+        />
+
+        {/* Project Picker Modal */}
+        <ProjectPickerModal
+          visible={projectPickerVisible}
+          onClose={() => setProjectPickerVisible(false)}
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          onSelectProject={setSelectedProjectId}
+          onCreateProject={handleCreateProject}
+          onDeleteProject={handleDeleteProject}
         />
       </View>
     </SafeAreaView>
@@ -169,8 +266,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#18181B',
   },
+  headerTitleContainer: {
+    flex: 1,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  projectDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#FAFAFA',
     letterSpacing: -0.5,
