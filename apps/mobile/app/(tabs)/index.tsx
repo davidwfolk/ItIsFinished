@@ -15,9 +15,11 @@ import { ProjectPickerModal, type ProjectItem } from '../../src/components/Proje
 import { getOrderIndexBetween, type ParsedTaskInput } from '@app/core';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { type CompressedAttachment } from '../../src/lib/imageCompressor';
 
 export default function TodayScreen() {
+  const router = useRouter();
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -231,6 +233,10 @@ export default function TodayScreen() {
           projects={projects}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
+          onStartFocus={(_taskId, _taskTitle) => {
+            setDetailModalVisible(false);
+            router.push('/(tabs)/focus');
+          }}
         />
 
         {/* Project Picker Modal */}

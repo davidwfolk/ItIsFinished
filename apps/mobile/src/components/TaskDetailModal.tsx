@@ -34,6 +34,7 @@ export interface TaskDetailModalProps {
   projects: Array<{ id: string; name: string; color?: string | null }>;
   onUpdateTask: (id: string, updates: any) => void;
   onDeleteTask: (id: string) => void;
+  onStartFocus?: (taskId: string, taskTitle: string) => void;
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
@@ -43,6 +44,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   projects,
   onUpdateTask,
   onDeleteTask,
+  onStartFocus,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -270,8 +272,22 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </View>
         </ScrollView>
 
-        {/* Save Bar */}
+        {/* Footer Actions */}
         <View style={styles.footer}>
+          {onStartFocus && (
+            <TouchableOpacity
+              style={styles.focusButton}
+              onPress={() => {
+                onStartFocus(task.id, task.title);
+                onClose();
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="timer-outline" size={18} color="#FB923C" />
+              <Text style={styles.focusButtonText}>Start Focus</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.saveButton}
             onPress={handleSave}
@@ -424,13 +440,34 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: 20,
     paddingVertical: Platform.OS === 'ios' ? 24 : 16,
     borderTopWidth: 1,
     borderTopColor: '#18181B',
     backgroundColor: '#09090B',
   },
+  focusButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#7C2D1225',
+    borderWidth: 1,
+    borderColor: '#EA580C50',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  focusButtonText: {
+    color: '#FB923C',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   saveButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
