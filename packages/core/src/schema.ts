@@ -119,6 +119,27 @@ export const attachments = new Table({
   updated_at: column.text
 });
 
+export const focus_sessions = new Table({
+  user_id: column.text,
+  task_id: column.text,
+  duration_minutes: column.integer,
+  started_at: column.text,
+  completed_at: column.text,
+  created_at: column.text
+});
+
+export const saved_filters = new Table({
+  user_id: column.text,
+  name: column.text,
+  icon: column.text,
+  color: column.text,
+  query_rules: column.text,
+  order_index: column.text,
+  deleted_at: column.text,
+  created_at: column.text,
+  updated_at: column.text
+});
+
 export const AppSchema = new Schema({
   profiles,
   projects,
@@ -130,7 +151,9 @@ export const AppSchema = new Schema({
   habits,
   habit_logs,
   comments,
-  attachments
+  attachments,
+  focus_sessions,
+  saved_filters
 });
 
 export type DatabaseSchema = typeof AppSchema;

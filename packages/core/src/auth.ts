@@ -45,11 +45,12 @@ export class AuthManager {
     return data;
   }
 
-  async sendMagicLink(email: string) {
+  async sendMagicLink(email: string, redirectTo?: string) {
+    const origin = typeof globalThis !== 'undefined' && 'location' in globalThis ? (globalThis as any).location?.origin : undefined;
     const { data, error } = await this.supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: redirectTo || origin,
       },
     });
     if (error) throw error;

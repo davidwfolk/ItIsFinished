@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { usePowerSync, useQuery } from '@powersync/react';
+import { type TaskRow, getOrderIndexBetween } from '@app/core';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -36,16 +38,18 @@ const HOURS = [
 ];
 
 export function CalendarTimeGrid() {
+  const powersync = usePowerSync();
   // Current view reference date (defaults to current week)
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  const [inboxTasks, setInboxTasks] = useState<InboxTask[]>([
-    { id: 'inbox-1', title: 'Write unit tests for lexicographical indexing', priority: 2, project: 'Testing', durationMinutes: 45 },
-    { id: 'inbox-2', title: 'Test APNs silent push debouncing on Edge Function', priority: 1, project: 'Infrastructure', durationMinutes: 60 },
-    { id: 'inbox-3', title: 'Create icon assets for Expo dark splash', priority: 3, project: 'Design', durationMinutes: 30 },
-    { id: 'inbox-4', title: 'Configure Supabase RLS security policies', priority: 1, project: 'Security', durationMinutes: 90 },
-    { id: 'inbox-5', title: 'Refine 120 FPS swipe gesture springs', priority: 2, project: 'Mobile UX', durationMinutes: 45 },
-  ]);
+  // Live Query from PowerSync SQLite
+  const { data: dbTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
+    `SELECT t.*, p.name as project_name 
+     FROM tasks t 
+     LEFT JOIN projects p ON t.project_id = p.id 
+     WHERE t.deleted_at IS NULL 
+     ORDER BY t.order_index ASC`
+  );
 
   // Compute the 5 days (Mon-Fri) for the currently selected week
   const weekDays = useMemo(() => {
@@ -75,35 +79,32 @@ export function CalendarTimeGrid() {
     return days;
   }, [currentDate]);
 
-  const [scheduledTasks, setScheduledTasks] = useState<CalendarTask[]>([
-    {
-      id: 'sched-1',
-      title: 'PowerSync Logical Replication Tuning',
-      dateStr: weekDays[0]?.dateStr || '2026-08-28',
-      startTime: '09:00',
-      durationMinutes: 90,
-      priority: 1,
-      project: 'Core Architecture',
-    },
-    {
-      id: 'sched-2',
-      title: 'Review Supabase RLS & Storage Buckets',
-      dateStr: weekDays[0]?.dateStr || '2026-08-28',
-      startTime: '11:30',
-      durationMinutes: 60,
-      priority: 2,
-      project: 'Security',
-    },
-    {
-      id: 'sched-3',
-      title: 'Mobile 120 FPS Gesture Benchmark',
-      dateStr: weekDays[1]?.dateStr || '2026-08-29',
-      startTime: '10:00',
-      durationMinutes: 60,
-      priority: 1,
-      project: 'Mobile UX',
-    },
-  ]);
+  // Derived tasks from SQLite query
+  const inboxTasks: InboxTask[] = useMemo(() => {
+    return dbTasks
+      .filter(t => !t.due_time && !t.completed_at)
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+        project: t.project_name || 'Inbox',
+        durationMinutes: t.estimated_minutes || 30,
+      }));
+  }, [dbTasks]);
+
+  const scheduledTasks: CalendarTask[] = useMemo(() => {
+    return dbTasks
+      .filter(t => !!t.due_time && !t.completed_at)
+      .map(t => ({
+        id: t.id,
+        title: t.title,
+        dateStr: t.due_date || weekDays[0]?.dateStr || new Date().toISOString().slice(0, 10),
+        startTime: t.due_time!.slice(0, 5),
+        durationMinutes: t.estimated_minutes || 45,
+        priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+        project: t.project_name || 'General',
+      }));
+  }, [dbTasks, weekDays]);
 
   const [draggedItem, setDraggedItem] = useState<{ source: 'inbox' | 'calendar'; id: string } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{ dateStr: string; hour: string } | null>(null);
@@ -154,91 +155,88 @@ export function CalendarTimeGrid() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDropOnSlot = (targetDateStr: string, targetHour: string, e: React.DragEvent) => {
+  const handleDropOnSlot = async (targetDateStr: string, targetHour: string, e: React.DragEvent) => {
     e.preventDefault();
     if (!draggedItem) return;
 
-    if (draggedItem.source === 'inbox') {
-      const inboxTask = inboxTasks.find(t => t.id === draggedItem.id);
-      if (!inboxTask) return;
-
-      // Remove from inbox and add to scheduled
-      setInboxTasks(prev => prev.filter(t => t.id !== draggedItem.id));
-      const newScheduled: CalendarTask = {
-        id: crypto.randomUUID(),
-        title: inboxTask.title,
-        dateStr: targetDateStr,
-        startTime: targetHour,
-        durationMinutes: inboxTask.durationMinutes,
-        priority: inboxTask.priority,
-        project: inboxTask.project,
-      };
-      setScheduledTasks(prev => [...prev, newScheduled]);
-    } else if (draggedItem.source === 'calendar') {
-      // Move existing scheduled task to new day/time
-      setScheduledTasks(prev =>
-        prev.map(t =>
-          t.id === draggedItem.id
-            ? { ...t, dateStr: targetDateStr, startTime: targetHour }
-            : t
-        )
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET due_date = ?, due_time = ?, updated_at = ? WHERE id = ?`,
+        [targetDateStr, targetHour + ':00', now, draggedItem.id]
       );
+    } catch (err) {
+      console.error('Failed to schedule task in SQLite:', err);
     }
     setDraggedItem(null);
   };
 
   // Duration Resizing (Cycle through 30m, 45m, 60m, 90m, 120m)
-  const handleCycleDuration = (taskId: string, e: React.MouseEvent) => {
+  const handleCycleDuration = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const durations = [30, 45, 60, 90, 120];
-    setScheduledTasks(prev =>
-      prev.map(t => {
-        if (t.id === taskId) {
-          const nextIdx = (durations.indexOf(t.durationMinutes) + 1) % durations.length;
-          return { ...t, durationMinutes: durations[nextIdx] };
-        }
-        return t;
-      })
-    );
+    const task = scheduledTasks.find(t => t.id === taskId);
+    if (!task) return;
+    const nextIdx = (durations.indexOf(task.durationMinutes) + 1) % durations.length;
+    const nextDuration = durations[nextIdx];
+    const now = new Date().toISOString();
+
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET estimated_minutes = ?, updated_at = ? WHERE id = ?`,
+        [nextDuration, now, taskId]
+      );
+    } catch (err) {
+      console.error('Failed to cycle task duration in SQLite:', err);
+    }
   };
 
   // Remove Scheduled Task back to Inbox
-  const handleUnscheduleTask = (taskId: string, e: React.MouseEvent) => {
+  const handleUnscheduleTask = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const task = scheduledTasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    setScheduledTasks(prev => prev.filter(t => t.id !== taskId));
-    setInboxTasks(prev => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        title: task.title,
-        priority: task.priority,
-        project: task.project,
-        durationMinutes: task.durationMinutes,
-      },
-    ]);
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET due_time = NULL, updated_at = ? WHERE id = ?`,
+        [now, taskId]
+      );
+    } catch (err) {
+      console.error('Failed to unschedule task in SQLite:', err);
+    }
   };
 
   // Create Custom Task on Slot Click
-  const handleCreateOnSlot = (e: React.FormEvent) => {
+  const handleCreateOnSlot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlot || !newSlotTaskTitle.trim()) return;
 
-    const newTask: CalendarTask = {
-      id: crypto.randomUUID(),
-      title: newSlotTaskTitle.trim(),
-      dateStr: selectedSlot.dateStr,
-      startTime: selectedSlot.hour,
-      durationMinutes: 45,
-      priority: 2,
-      project: 'General',
-    };
+    const lastIndex = dbTasks.length > 0 ? dbTasks[dbTasks.length - 1].order_index : null;
+    const newIndex = getOrderIndexBetween(lastIndex, null);
+    const now = new Date().toISOString();
 
-    setScheduledTasks(prev => [...prev, newTask]);
-    setNewSlotTaskTitle('');
-    setSelectedSlot(null);
+    try {
+      await powersync.execute(
+        `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          'proj-core-arch',
+          newSlotTaskTitle.trim(),
+          2,
+          selectedSlot.dateStr,
+          selectedSlot.hour + ':00',
+          45,
+          newIndex,
+          'todo',
+          now,
+          now
+        ]
+      );
+      setNewSlotTaskTitle('');
+      setSelectedSlot(null);
+    } catch (err) {
+      console.error('Failed to create calendar slot task in SQLite:', err);
+    }
   };
 
   const monthYearTitle = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });

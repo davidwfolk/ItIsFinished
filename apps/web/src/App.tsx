@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { parseQuickAdd, getOrderIndexBetween, DEFAULT_SMART_FILTERS, type ParsedTaskInput, type SavedSmartFilter } from '@app/core';
+import { parseQuickAdd, getOrderIndexBetween, DEFAULT_SMART_FILTERS, type ParsedTaskInput, type SavedSmartFilter, type TaskRow } from '@app/core';
+import { usePowerSync, useQuery } from '@powersync/react';
 import { 
   CheckCircle2, 
   Circle, 
@@ -30,7 +31,7 @@ import { SubtaskTree } from './components/SubtaskTree';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
 
-interface MockTask {
+export interface ViewTask {
   id: string;
   title: string;
   order_index: string;
@@ -45,16 +46,17 @@ interface MockTask {
 }
 
 export default function App() {
+  const powersync = usePowerSync();
   const [activeTab, setActiveTab] = useState<'today' | 'calendar' | 'matrix' | 'analytics'>('today');
   const [quickAddText, setQuickAddText] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>('1');
+  const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
 
   // Modals & Drawers State
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [membersModalOpen, setMembersModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [activeCommentTask, setActiveCommentTask] = useState<MockTask | null>(null);
+  const [activeCommentTask, setActiveCommentTask] = useState<ViewTask | null>(null);
   const [smartFilters, setSmartFilters] = useState<SavedSmartFilter[]>(DEFAULT_SMART_FILTERS);
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
 
@@ -63,123 +65,135 @@ export default function App() {
     name: 'You (Alex)'
   });
 
-  const [tasks, setTasks] = useState<MockTask[]>([
-    {
-      id: '1',
-      title: 'Initialize PowerSync stream definitions',
-      order_index: 'a0',
-      due_date: '2026-08-28',
-      due_time: '10:00:00',
-      estimated_minutes: 30,
-      priority: 1,
-      project: 'Core Architecture',
-      tags: ['database', 'security'],
-      completed: true,
-      hasSubtasks: true,
-    },
-    {
-      id: '2',
-      title: 'Test PostgreSQL COLLATE "C" sorting parity',
-      order_index: 'a1',
-      due_date: '2026-08-28',
-      due_time: '14:00:00',
-      estimated_minutes: 45,
-      priority: 2,
-      project: 'Core Architecture',
-      tags: ['sqlite', 'postgres'],
-      completed: true,
+  // Live Reactive SQLite Query
+  const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
+    `SELECT t.*, p.name as project_name 
+     FROM tasks t 
+     LEFT JOIN projects p ON t.project_id = p.id 
+     WHERE t.deleted_at IS NULL 
+     ORDER BY t.order_index ASC`
+  );
+
+  // Map raw database rows to UI Task models
+  const tasks: ViewTask[] = useMemo(() => {
+    return rawTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      order_index: t.order_index,
+      due_date: t.due_date,
+      due_time: t.due_time,
+      estimated_minutes: t.estimated_minutes,
+      priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+      project: t.project_name || 'Inbox',
+      tags: [],
+      completed: !!t.completed_at || t.status === 'done',
       hasSubtasks: false,
-    },
-    {
-      id: '3',
-      title: 'Build Drag-and-Drop fractional string reorder',
-      order_index: 'a2',
-      due_date: '2026-08-29',
-      due_time: null,
-      estimated_minutes: 60,
-      priority: 3,
-      project: 'Frontend UI',
-      tags: ['gestures'],
-      completed: false,
-      hasSubtasks: false,
-    },
-    {
-      id: '4',
-      title: 'Verify APNs silent push debouncing triggers',
-      order_index: 'a3',
-      due_date: '2026-08-30',
-      due_time: '16:00:00',
-      estimated_minutes: 45,
-      priority: 1,
-      project: 'Mobile Backend',
-      tags: ['apns', 'ios'],
-      completed: false,
-      hasSubtasks: false,
-    }
-  ]);
+    }));
+  }, [rawTasks]);
 
   // Real-time live NLP extraction as user types
   const parsedPreview: ParsedTaskInput = useMemo(() => {
     return parseQuickAdd(quickAddText);
   }, [quickAddText]);
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickAddText.trim()) return;
 
     const parsed = parseQuickAdd(quickAddText);
     const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
+    const now = new Date().toISOString();
+    const newId = crypto.randomUUID();
 
-    const newTask: MockTask = {
-      id: crypto.randomUUID(),
-      title: parsed.title,
-      order_index: newIndex,
-      due_date: parsed.dueDate,
-      due_time: parsed.dueTime,
-      estimated_minutes: parsed.estimatedMinutes,
-      priority: parsed.priority,
-      project: parsed.projectName || 'Inbox',
-      tags: parsed.tags,
-      completed: false,
-      hasSubtasks: false,
-    };
-
-    setTasks([...tasks, newTask]);
-    setQuickAddText('');
+    try {
+      await powersync.execute(
+        `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newId,
+          'proj-core-arch',
+          parsed.title,
+          parsed.priority || 4,
+          parsed.dueDate || null,
+          parsed.dueTime || null,
+          parsed.estimatedMinutes || null,
+          newIndex,
+          'todo',
+          now,
+          now
+        ]
+      );
+      setQuickAddText('');
+    } catch (err) {
+      console.error('Failed to insert task into SQLite:', err);
+    }
   };
 
-  const toggleTask = (id: string) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  const toggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const isCompleted = !task.completed;
+    const now = new Date().toISOString();
+
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET completed_at = ?, status = ?, updated_at = ? WHERE id = ?`,
+        [isCompleted ? now : null, isCompleted ? 'done' : 'todo', now, id]
+      );
+    } catch (err) {
+      console.error('Failed to toggle task in SQLite:', err);
+    }
   };
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
+  const deleteTask = async (id: string) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+        [now, now, id]
+      );
+    } catch (err) {
+      console.error('Failed to soft delete task in SQLite:', err);
+    }
   };
 
-  const updateTaskPriority = (id: string, newPriority: 1 | 2 | 3 | 4) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, priority: newPriority } : t));
+  const updateTaskPriority = async (id: string, newPriority: 1 | 2 | 3 | 4) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?`,
+        [newPriority, now, id]
+      );
+    } catch (err) {
+      console.error('Failed to update task priority in SQLite:', err);
+    }
   };
 
-  const addTaskToQuadrant = (priority: 1 | 2 | 3 | 4, title: string) => {
+  const addTaskToQuadrant = async (priority: 1 | 2 | 3 | 4, title: string) => {
     const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
+    const now = new Date().toISOString();
 
-    const newTask: MockTask = {
-      id: crypto.randomUUID(),
-      title,
-      order_index: newIndex,
-      due_date: new Date().toISOString().split('T')[0],
-      due_time: null,
-      estimated_minutes: 30,
-      priority,
-      project: 'General',
-      tags: [],
-      completed: false,
-      hasSubtasks: false,
-    };
-
-    setTasks([...tasks, newTask]);
+    try {
+      await powersync.execute(
+        `INSERT INTO tasks (id, project_id, title, priority, due_date, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          'proj-core-arch',
+          title,
+          priority,
+          now.slice(0, 10),
+          newIndex,
+          'todo',
+          now,
+          now
+        ]
+      );
+    } catch (err) {
+      console.error('Failed to add quadrant task to SQLite:', err);
+    }
   };
 
   // Drag-and-Drop Reordering using Fractional Lexicographical Indexing
@@ -194,7 +208,7 @@ export default function App() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDropOnTask = (targetTaskId: string, e: React.DragEvent) => {
+  const handleDropOnTask = async (targetTaskId: string, e: React.DragEvent) => {
     e.preventDefault();
     if (!draggedTaskId || draggedTaskId === targetTaskId) return;
 
@@ -213,12 +227,15 @@ export default function App() {
       newOrderIndex = getOrderIndexBetween(prev, next);
     }
 
-    const updatedTasks = tasks.map(t =>
-      t.id === draggedTaskId ? { ...t, order_index: newOrderIndex } : t
-    );
-
-    updatedTasks.sort((a, b) => (a.order_index < b.order_index ? -1 : 1));
-    setTasks(updatedTasks);
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET order_index = ?, updated_at = ? WHERE id = ?`,
+        [newOrderIndex, now, draggedTaskId]
+      );
+    } catch (err) {
+      console.error('Failed to reorder task in SQLite:', err);
+    }
     setDraggedTaskId(null);
   };
 

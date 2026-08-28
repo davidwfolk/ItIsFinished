@@ -372,17 +372,86 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      focus_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          task_id: string | null;
+          duration_minutes: number;
+          started_at: string | null;
+          completed_at: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          task_id?: string | null;
+          duration_minutes: number;
+          started_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          task_id?: string | null;
+          duration_minutes?: number;
+          started_at?: string | null;
+          completed_at?: string | null;
+          created_at?: string | null;
+        };
+      };
+      saved_filters: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          icon: string | null;
+          color: string | null;
+          query_rules: Record<string, unknown>;
+          order_index: string;
+          deleted_at: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          icon?: string | null;
+          color?: string | null;
+          query_rules?: Record<string, unknown>;
+          order_index?: string;
+          deleted_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          icon?: string | null;
+          color?: string | null;
+          query_rules?: Record<string, unknown>;
+          order_index?: string;
+          deleted_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
     };
   };
 }
 
 export type ActivityLogRow = Database['public']['Tables']['activity_logs']['Row'];
 export type CommentRow = Database['public']['Tables']['comments']['Row'];
+export type FocusSessionRow = Database['public']['Tables']['focus_sessions']['Row'];
 export type HabitLogRow = Database['public']['Tables']['habit_logs']['Row'];
 export type HabitRow = Database['public']['Tables']['habits']['Row'];
 export type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 export type ProjectMemberRow = Database['public']['Tables']['project_members']['Row'];
 export type ProjectRow = Database['public']['Tables']['projects']['Row'];
+export type SavedFilterRow = Database['public']['Tables']['saved_filters']['Row'];
 export type SectionRow = Database['public']['Tables']['sections']['Row'];
 export type TagRow = Database['public']['Tables']['tags']['Row'];
 export type TaskTagRow = Database['public']['Tables']['task_tags']['Row'];
