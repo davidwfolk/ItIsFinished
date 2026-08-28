@@ -60,20 +60,29 @@ export function CalendarTimeGrid() {
     
     const monday = new Date(d);
     monday.setDate(d.getDate() + distanceToMonday);
+    monday.setHours(0, 0, 0, 0);
 
     const days = [];
-    const todayStr = new Date().toISOString().split('T')[0];
+    const nowLocal = new Date();
+    const todayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
     const totalDays = viewMode === 'workweek' ? 5 : 7;
 
     for (let i = 0; i < totalDays; i++) {
       const dayDate = new Date(monday);
       dayDate.setDate(monday.getDate() + i);
 
-      const dateStr = dayDate.toISOString().split('T')[0];
-      const name = dayDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const y = dayDate.getFullYear();
+      const m = String(dayDate.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(dayDate.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${dayNum}`;
+
+      const weekday = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+      const dayOfMonth = dayDate.getDate();
+
       days.push({
         dateStr,
-        name,
+        weekday,
+        dayOfMonth,
         isToday: dateStr === todayStr,
         dayIndex: i,
         rawDate: dayDate,
@@ -189,10 +198,10 @@ export function CalendarTimeGrid() {
     setDraggedItem(null);
   };
 
-  // Duration Resizing (Cycle through 30m, 45m, 60m, 90m, 120m)
+  // Duration Resizing (Cycle through 15m, 30m, 45m, 60m, 90m, 120m)
   const handleCycleDuration = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const durations = [30, 45, 60, 90, 120];
+    const durations = [15, 30, 45, 60, 90, 120];
     const task = scheduledTasks.find(t => t.id === taskId);
     if (!task) return;
     const nextIdx = (durations.indexOf(task.durationMinutes) + 1) % durations.length;
@@ -256,7 +265,6 @@ export function CalendarTimeGrid() {
       console.error('Failed to create calendar slot task in SQLite:', err);
     }
   };
-
 
   return (
     <div className="flex h-full w-full bg-zinc-950 overflow-hidden">
@@ -365,11 +373,18 @@ export function CalendarTimeGrid() {
           {weekDays.map((day) => (
             <div
               key={day.dateStr}
-              className={`flex-1 py-2.5 text-center text-xs font-semibold border-r border-zinc-800/80 last:border-r-0 ${
-                day.isToday ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-400'
+              className={`flex-1 py-2 text-center border-r border-zinc-800/80 last:border-r-0 flex flex-col items-center justify-center gap-0.5 ${
+                day.isToday ? 'bg-blue-500/10' : ''
               }`}
             >
-              {day.name} {day.isToday && <span className="ml-1 text-[10px] uppercase font-mono px-1 rounded bg-blue-500/20">Today</span>}
+              <span className={`text-[11px] font-mono font-bold tracking-wider ${day.isToday ? 'text-blue-400' : 'text-zinc-500'}`}>
+                {day.weekday}
+              </span>
+              <span className={`h-6 w-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                day.isToday ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40' : 'text-zinc-200'
+              }`}>
+                {day.dayOfMonth}
+              </span>
             </div>
           ))}
         </div>

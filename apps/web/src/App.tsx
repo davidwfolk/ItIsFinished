@@ -106,13 +106,33 @@ export default function App() {
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
 
+    const projectName = parsed.projectName || 'Inbox';
+    let targetProjectId = 'proj-core-arch';
+
     try {
+      // Find or auto-create project
+      const existing = await powersync.getOptional<{ id: string }>(
+        `SELECT id FROM projects WHERE LOWER(name) = LOWER(?) AND deleted_at IS NULL LIMIT 1`,
+        [projectName]
+      );
+
+      if (existing?.id) {
+        targetProjectId = existing.id;
+      } else {
+        targetProjectId = `proj-${crypto.randomUUID().slice(0, 8)}`;
+        await powersync.execute(
+          `INSERT INTO projects (id, owner_id, name, color, order_index, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [targetProjectId, 'demo-user', projectName, '#3B82F6', 'a0', now, now]
+        );
+      }
+
       await powersync.execute(
         `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newId,
-          'proj-core-arch',
+          targetProjectId,
           parsed.title,
           parsed.priority || 4,
           parsed.dueDate || null,
