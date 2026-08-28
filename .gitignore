@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Production
+dist
+build
+.output
+
+# Turbo
+.turbo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Mobile (Expo / React Native)
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Tauri / Rust
+src-tauri/target/
+
+# Supabase
+.supabase/local-dump.sql

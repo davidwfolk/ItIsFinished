@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Finished",
+    "slug": "finished-task-manager",
+    "scheme": "finished",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.finished.app"
+    },
+    "android": {
+      "package": "com.finished.app"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
