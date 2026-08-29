@@ -34,9 +34,11 @@ export interface TaskDetailDrawerProps {
     due_time?: string | null;
     estimated_minutes?: number | null;
     recurrence_rule?: string | null;
+    assigned_to?: string | null;
     completed: boolean;
   } | null;
   projects: { id: string; name: string; color?: string | null }[];
+  members?: { id: string; name: string; email?: string; color?: string; role?: string }[];
   onUpdateTask: (id: string, updates: Partial<TaskRow>) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
   onStartFocus?: (taskId: string) => void;
@@ -48,6 +50,11 @@ export function TaskDetailDrawer({
   taskId,
   task,
   projects,
+  members = [
+    { id: 'user-1', name: 'Alex (You)', color: '#3B82F6', role: 'Owner' },
+    { id: 'user-2', name: 'Sarah K.', color: '#10B981', role: 'Editor' },
+    { id: 'user-3', name: 'David W.', color: '#F59E0B', role: 'Editor' },
+  ],
   onUpdateTask,
   onDeleteTask,
   onStartFocus,
@@ -60,6 +67,7 @@ export function TaskDetailDrawer({
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments'>('details');
 
   // Comments mock state
@@ -78,6 +86,7 @@ export function TaskDetailDrawer({
       setDueTime(task.due_time ? task.due_time.slice(0, 5) : '');
       setEstimatedMinutes(task.estimated_minutes || null);
       setRecurrenceRule(task.recurrence_rule || null);
+      setAssignedTo(task.assigned_to || null);
     }
   }, [task, taskId]);
 
@@ -123,6 +132,11 @@ export function TaskDetailDrawer({
   const handleRecurrenceChange = (rule: string | null) => {
     setRecurrenceRule(rule);
     onUpdateTask(taskId, { recurrence_rule: rule });
+  };
+
+  const handleAssigneeChange = (memberId: string | null) => {
+    setAssignedTo(memberId);
+    onUpdateTask(taskId, { assigned_to: memberId });
   };
 
   const handleToggleComplete = () => {
@@ -354,6 +368,46 @@ export function TaskDetailDrawer({
                   }`}
                 >
                   {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Assignee */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-blue-400" /> Assignee
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleAssigneeChange(null)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                  !assignedTo
+                    ? 'bg-zinc-800 border-zinc-700 text-zinc-200 font-bold'
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                Unassigned
+              </button>
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleAssigneeChange(m.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-2 transition ${
+                    assignedTo === m.id
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-bold'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                >
+                  <span
+                    style={{ backgroundColor: m.color || '#3B82F6' }}
+                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                  />
+                  <span>{m.name}</span>
                 </button>
               ))}
             </div>

@@ -68,10 +68,18 @@ export interface ViewTask {
   section_id?: string | null;
   description?: string | null;
   recurrence_rule?: string | null;
+  assigned_to?: string | null;
+  assignedTo?: { id: string; name: string; color: string; role?: string } | null;
   tags: string[];
   completed: boolean;
   hasSubtasks?: boolean;
 }
+
+const TEAM_MEMBERS = [
+  { id: 'user-1', name: 'Alex (You)', color: '#3B82F6', role: 'Owner' },
+  { id: 'user-2', name: 'Sarah K.', color: '#10B981', role: 'Editor' },
+  { id: 'user-3', name: 'David W.', color: '#F59E0B', role: 'Editor' },
+];
 
 export default function App() {
   const powersync = usePowerSync();
@@ -141,6 +149,8 @@ export default function App() {
       project_id: t.project_id,
       section_id: t.section_id,
       recurrence_rule: t.recurrence_rule,
+      assigned_to: t.assigned_to,
+      assignedTo: TEAM_MEMBERS.find(m => m.id === t.assigned_to) || null,
       tags: [],
       completed: !!t.completed_at || t.status === 'done',
       hasSubtasks: false,
@@ -852,6 +862,23 @@ export default function App() {
                       <Edit2 className="h-3.5 w-3.5 text-zinc-400" /> Project Settings
                     </button>
                   )}
+                  {/* Online Collaborator Stack */}
+                  <div 
+                    onClick={() => setMembersModalOpen(true)}
+                    className="flex items-center -space-x-1.5 cursor-pointer hover:opacity-80 transition"
+                    title="Team Collaborators"
+                  >
+                    {TEAM_MEMBERS.map((m) => (
+                      <div
+                        key={m.id}
+                        style={{ backgroundColor: m.color }}
+                        className="w-6 h-6 rounded-full border-2 border-zinc-950 text-[8px] font-bold text-white flex items-center justify-center shadow-sm relative"
+                      >
+                        {m.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    ))}
+                  </div>
+
                   <button
                     onClick={() => setMembersModalOpen(true)}
                     className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 flex items-center gap-1.5 transition font-medium"
@@ -1011,6 +1038,15 @@ export default function App() {
                                 <Clock className="h-3 w-3" /> {task.estimated_minutes}m
                               </span>
                             )}
+                            {task.assignedTo && (
+                              <span
+                                style={{ backgroundColor: task.assignedTo.color }}
+                                className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 shadow-sm"
+                                title={task.assignedTo.name}
+                              >
+                                {task.assignedTo.name.slice(0, 2).toUpperCase()}
+                              </span>
+                            )}
                             {task.tags.map(tag => (
                               <span key={tag} className="text-zinc-400 font-mono">
                                 #{tag}
@@ -1095,6 +1131,7 @@ export default function App() {
         taskId={selectedTaskId}
         task={selectedTask}
         projects={rawProjects}
+        members={TEAM_MEMBERS}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={deleteTask}
         onStartFocus={(taskId) => {

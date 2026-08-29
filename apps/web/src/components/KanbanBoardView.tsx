@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { 
   Plus, 
   CheckCircle2, 
@@ -23,6 +23,8 @@ export interface KanbanTaskItem {
   due_date?: string | null;
   recurrence_rule?: string | null;
   estimated_minutes?: number | null;
+  assigned_to?: string | null;
+  assignedTo?: { id?: string; name: string; color: string } | null;
   completed?: boolean;
   completed_at?: string | null;
 }
@@ -330,6 +332,15 @@ export function KanbanBoardView({
                         {task.estimated_minutes && (
                           <span className="flex items-center gap-1 text-purple-400">
                             <Hourglass className="h-3 w-3" /> {task.estimated_minutes}m
+                          </span>
+                        )}
+                        {task.assignedTo && (
+                          <span
+                            style={{ backgroundColor: task.assignedTo.color }}
+                            className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 shadow-sm"
+                            title={task.assignedTo.name}
+                          >
+                            {task.assignedTo.name.slice(0, 2).toUpperCase()}
                           </span>
                         )}
                       </div>

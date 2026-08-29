@@ -7,7 +7,6 @@ import {
   Folder, 
   ChevronLeft, 
   ChevronRight, 
-  CheckCircle2, 
   GripVertical,
   Plus,
   Trash2
@@ -21,6 +20,7 @@ export interface CalendarTask {
   durationMinutes: number; // 30, 45, 60, 90, 120
   priority: 1 | 2 | 3 | 4;
   project: string;
+  assignedTo?: { id: string; name: string; color: string } | null;
 }
 
 export interface InboxTask {
@@ -29,6 +29,7 @@ export interface InboxTask {
   priority: 1 | 2 | 3 | 4;
   project: string;
   durationMinutes: number;
+  assignedTo?: { id: string; name: string; color: string } | null;
 }
 
 const HOURS = [
@@ -37,11 +38,18 @@ const HOURS = [
   '16:00', '17:00', '18:00', '19:00', '20:00'
 ];
 
+const TEAM_MEMBERS = [
+  { id: 'all', name: 'Everyone', color: '#6366F1' },
+  { id: 'user-1', name: 'Alex (You)', color: '#3B82F6' },
+  { id: 'user-2', name: 'Sarah K.', color: '#10B981' },
+  { id: 'user-3', name: 'David W.', color: '#F59E0B' },
+];
+
 export function CalendarTimeGrid() {
   const powersync = usePowerSync();
-  // Current view reference date (defaults to current week)
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'workweek' | 'fullweek'>('fullweek');
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
 
   // Live Query from PowerSync SQLite
   const { data: dbTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
@@ -91,32 +99,48 @@ export function CalendarTimeGrid() {
     return days;
   }, [currentDate, viewMode]);
 
-  // Derived tasks from SQLite query
+  // Derived tasks from SQLite query (filtered by team member)
   const inboxTasks: InboxTask[] = useMemo(() => {
     return dbTasks
-      .filter(t => !t.due_time && !t.completed_at)
-      .map(t => ({
-        id: t.id,
-        title: t.title,
-        priority: (t.priority || 4) as 1 | 2 | 3 | 4,
-        project: t.project_name || 'Inbox',
-        durationMinutes: t.estimated_minutes || 30,
-      }));
-  }, [dbTasks]);
+      .filter((t) => {
+        if (t.due_time || t.completed_at) return false;
+        if (selectedMemberId !== 'all' && t.assigned_to !== selectedMemberId) return false;
+        return true;
+      })
+      .map((t) => {
+        const member = TEAM_MEMBERS.find((m) => m.id === t.assigned_to);
+        return {
+          id: t.id,
+          title: t.title,
+          priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+          project: t.project_name || 'Inbox',
+          durationMinutes: t.estimated_minutes || 30,
+          assignedTo: member ? { id: member.id, name: member.name, color: member.color } : null,
+        };
+      });
+  }, [dbTasks, selectedMemberId]);
 
   const scheduledTasks: CalendarTask[] = useMemo(() => {
     return dbTasks
-      .filter(t => !!t.due_time && !t.completed_at)
-      .map(t => ({
-        id: t.id,
-        title: t.title,
-        dateStr: t.due_date || weekDays[0]?.dateStr || new Date().toISOString().slice(0, 10),
-        startTime: t.due_time!.slice(0, 5),
-        durationMinutes: t.estimated_minutes || 45,
-        priority: (t.priority || 4) as 1 | 2 | 3 | 4,
-        project: t.project_name || 'General',
-      }));
-  }, [dbTasks, weekDays]);
+      .filter((t) => {
+        if (!t.due_time || t.completed_at) return false;
+        if (selectedMemberId !== 'all' && t.assigned_to !== selectedMemberId) return false;
+        return true;
+      })
+      .map((t) => {
+        const member = TEAM_MEMBERS.find((m) => m.id === t.assigned_to);
+        return {
+          id: t.id,
+          title: t.title,
+          dateStr: t.due_date || weekDays[0]?.dateStr || new Date().toISOString().slice(0, 10),
+          startTime: t.due_time!.slice(0, 5),
+          durationMinutes: t.estimated_minutes || 45,
+          priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+          project: t.project_name || 'General',
+          assignedTo: member ? { id: member.id, name: member.name, color: member.color } : null,
+        };
+      });
+  }, [dbTasks, weekDays, selectedMemberId]);
 
   const [draggedItem, setDraggedItem] = useState<{ source: 'inbox' | 'calendar'; id: string } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{ dateStr: string; hour: string } | null>(null);
@@ -146,7 +170,6 @@ export function CalendarTimeGrid() {
     setCurrentDate(new Date());
   };
 
-  // Week Date Range Title (e.g. "Aug 24 – Aug 30, 2026")
   const weekRangeTitle = useMemo(() => {
     if (weekDays.length === 0) return '';
     const firstDay = weekDays[0].rawDate;
@@ -161,7 +184,6 @@ export function CalendarTimeGrid() {
     return `${startStr} – ${endStr}`;
   }, [weekDays]);
 
-  // Convert time to pixels (60px = 1 hour)
   const getTopOffset = (startTime: string) => {
     const [h, m] = startTime.split(':').map(Number);
     const startHour = 8;
@@ -170,7 +192,6 @@ export function CalendarTimeGrid() {
     return (minutes / 60) * hourHeight;
   };
 
-  // Drag-and-Drop Handlers
   const handleDragStart = (source: 'inbox' | 'calendar', id: string, e: React.DragEvent) => {
     setDraggedItem({ source, id });
     e.dataTransfer.setData('text/plain', JSON.stringify({ source, id }));
@@ -198,27 +219,26 @@ export function CalendarTimeGrid() {
     setDraggedItem(null);
   };
 
-  // Duration Resizing (Cycle through 15m, 30m, 45m, 60m, 90m, 120m)
   const handleCycleDuration = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const durations = [15, 30, 45, 60, 90, 120];
-    const task = scheduledTasks.find(t => t.id === taskId);
+    const task = scheduledTasks.find((t) => t.id === taskId);
     if (!task) return;
-    const nextIdx = (durations.indexOf(task.durationMinutes) + 1) % durations.length;
-    const nextDuration = durations[nextIdx];
-    const now = new Date().toISOString();
 
+    const durations = [15, 30, 45, 60, 90, 120];
+    const currentIndex = durations.indexOf(task.durationMinutes);
+    const nextDuration = durations[(currentIndex + 1) % durations.length];
+
+    const now = new Date().toISOString();
     try {
       await powersync.execute(
         `UPDATE tasks SET estimated_minutes = ?, updated_at = ? WHERE id = ?`,
         [nextDuration, now, taskId]
       );
     } catch (err) {
-      console.error('Failed to cycle task duration in SQLite:', err);
+      console.error('Failed to update task duration in SQLite:', err);
     }
   };
 
-  // Remove Scheduled Task back to Inbox
   const handleUnscheduleTask = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const now = new Date().toISOString();
@@ -232,21 +252,21 @@ export function CalendarTimeGrid() {
     }
   };
 
-  // Create Custom Task on Slot Click
   const handleCreateOnSlot = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlot || !newSlotTaskTitle.trim()) return;
 
+    const now = new Date().toISOString();
+    const newId = `task-${crypto.randomUUID().slice(0, 8)}`;
     const lastIndex = dbTasks.length > 0 ? dbTasks[dbTasks.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
-    const now = new Date().toISOString();
 
     try {
       await powersync.execute(
         `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          crypto.randomUUID(),
+          newId,
           'proj-core-arch',
           newSlotTaskTitle.trim(),
           2,
@@ -303,6 +323,15 @@ export function CalendarTimeGrid() {
                 <span className="flex items-center gap-1">
                   <Folder className="h-3 w-3" /> {t.project}
                 </span>
+                {t.assignedTo && (
+                  <span
+                    style={{ backgroundColor: t.assignedTo.color }}
+                    className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 ml-auto"
+                    title={t.assignedTo.name}
+                  >
+                    {t.assignedTo.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
                 <span className="ml-auto font-mono text-[10px] text-zinc-400 font-semibold">P{t.priority}</span>
               </div>
             </div>
@@ -317,10 +346,12 @@ export function CalendarTimeGrid() {
 
       {/* Main Calendar Grid Canvas */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Calendar Toolbar with Dynamic Month/Week Switcher */}
+        {/* Calendar Toolbar with Team Member Switcher */}
         <div className="h-14 border-b border-zinc-800/80 px-6 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-semibold tracking-tight">Time Blocking Grid</h2>
+            
+            {/* Week Navigation */}
             <div className="flex items-center gap-1 text-xs text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
               <button 
                 onClick={handlePrevWeek}
@@ -329,7 +360,12 @@ export function CalendarTimeGrid() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-3 font-semibold text-zinc-100 min-w-[170px] text-center">{weekRangeTitle}</span>
+              <button 
+                onClick={handleJumpToToday}
+                className="px-2 py-0.5 hover:bg-zinc-800 rounded font-medium text-xs text-zinc-200 transition"
+              >
+                Today
+              </button>
               <button 
                 onClick={handleNextWeek}
                 title="Next Week"
@@ -338,64 +374,85 @@ export function CalendarTimeGrid() {
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <button
-              onClick={handleJumpToToday}
-              className="px-2.5 py-1 text-xs font-medium rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 transition"
-            >
-              Today
-            </button>
 
-            {/* View Mode Toggle: 5 Days vs 7 Days */}
-            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs font-mono">
+            <span className="text-xs font-mono font-semibold text-zinc-400">
+              {weekRangeTitle}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Team Member Filter Bar */}
+            <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800">
+              {TEAM_MEMBERS.map((member) => (
+                <button
+                  key={member.id}
+                  onClick={() => setSelectedMemberId(member.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
+                    selectedMemberId === member.id
+                      ? 'bg-zinc-800 text-zinc-100 font-bold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <span
+                    style={{ backgroundColor: member.color }}
+                    className="w-2 h-2 rounded-full shrink-0"
+                  />
+                  <span>{member.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1 text-xs">
               <button
                 onClick={() => setViewMode('workweek')}
-                className={`px-2 py-0.5 rounded transition ${viewMode === 'workweek' ? 'bg-blue-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`px-2.5 py-1 rounded font-medium transition ${
+                  viewMode === 'workweek' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
               >
-                5 Days
+                Work Week (5d)
               </button>
               <button
                 onClick={() => setViewMode('fullweek')}
-                className={`px-2 py-0.5 rounded transition ${viewMode === 'fullweek' ? 'bg-blue-600 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`px-2.5 py-1 rounded font-medium transition ${
+                  viewMode === 'fullweek' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
               >
-                7 Days
+                Full Week (7d)
               </button>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-            <CheckCircle2 className="h-3.5 w-3.5" /> 100% Interactive Drag & Drop
           </div>
         </div>
 
         {/* Days Header */}
-        <div className="flex border-b border-zinc-800/80 bg-zinc-900/40">
-          <div className="w-16 shrink-0 border-r border-zinc-800/80" />
+        <div className="grid border-b border-zinc-800/80 bg-zinc-900/40" style={{ gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)` }}>
+          <div className="p-3 text-[11px] font-mono text-zinc-500 uppercase text-center border-r border-zinc-800/60">
+            GMT
+          </div>
           {weekDays.map((day) => (
             <div
               key={day.dateStr}
-              className={`flex-1 py-2 text-center border-r border-zinc-800/80 last:border-r-0 flex flex-col items-center justify-center gap-0.5 ${
+              className={`p-3 text-center border-r border-zinc-800/60 transition ${
                 day.isToday ? 'bg-blue-500/10' : ''
               }`}
             >
-              <span className={`text-[11px] font-mono font-bold tracking-wider ${day.isToday ? 'text-blue-400' : 'text-zinc-500'}`}>
+              <span className={`text-[11px] font-mono font-semibold uppercase ${day.isToday ? 'text-blue-400' : 'text-zinc-400'}`}>
                 {day.weekday}
               </span>
-              <span className={`h-6 w-6 flex items-center justify-center rounded-full text-xs font-bold ${
-                day.isToday ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40' : 'text-zinc-200'
-              }`}>
+              <div className={`text-sm font-bold mt-0.5 ${day.isToday ? 'text-blue-400 font-mono' : 'text-zinc-200'}`}>
                 {day.dayOfMonth}
-              </span>
+              </div>
             </div>
           ))}
         </div>
 
         {/* Scrollable Hourly Time Grid */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="flex min-h-[780px] relative">
-            {/* Hour Axis */}
-            <div className="w-16 shrink-0 border-r border-zinc-800/80 bg-zinc-950">
+        <div className="flex-1 overflow-y-auto relative">
+          <div className="grid relative min-h-[780px]" style={{ gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)` }}>
+            {/* Left Time Axis Labels */}
+            <div className="border-r border-zinc-800/60 bg-zinc-950/60">
               {HOURS.map((hour) => (
-                <div key={hour} className="h-[60px] text-right pr-3 text-[11px] font-mono text-zinc-600 border-b border-zinc-900/60 flex items-start justify-end pt-1">
+                <div key={hour} className="h-[60px] border-b border-zinc-800/40 pr-2 pt-1 text-right text-[10px] font-mono text-zinc-500">
                   {hour}
                 </div>
               ))}
@@ -405,18 +462,16 @@ export function CalendarTimeGrid() {
             {weekDays.map((day) => (
               <div
                 key={day.dateStr}
-                className={`flex-1 border-r border-zinc-800/80 last:border-r-0 relative ${
-                  day.isToday ? 'bg-blue-950/5' : 'bg-zinc-950/50'
-                }`}
+                className={`border-r border-zinc-800/60 relative ${day.isToday ? 'bg-blue-950/5' : ''}`}
               >
-                {/* Hour Grid Lines (Click to create, Drop target) */}
+                {/* Hourly Slots (Drop Targets) */}
                 {HOURS.map((hour) => (
                   <div
                     key={hour}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDropOnSlot(day.dateStr, hour, e)}
                     onClick={() => setSelectedSlot({ dateStr: day.dateStr, hour })}
-                    className="h-[60px] border-b border-zinc-900/60 hover:bg-zinc-800/30 cursor-pointer transition relative group"
+                    className="h-[60px] border-b border-zinc-800/40 hover:bg-zinc-800/20 transition cursor-pointer relative group"
                   >
                     <span className="opacity-0 group-hover:opacity-100 absolute top-1 right-2 text-[10px] text-zinc-500 font-mono">
                       + Block
@@ -446,8 +501,15 @@ export function CalendarTimeGrid() {
                       >
                         {/* Top Line: Full Width Task Title */}
                         <div className="flex items-start justify-between gap-1 min-w-0">
-                          <span className="font-semibold text-xs leading-tight truncate flex-1">
-                            {task.title}
+                          <span className="font-semibold text-xs leading-tight truncate flex-1 flex items-center gap-1">
+                            {task.assignedTo && (
+                              <span
+                                style={{ backgroundColor: task.assignedTo.color }}
+                                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                                title={task.assignedTo.name}
+                              />
+                            )}
+                            <span className="truncate">{task.title}</span>
                           </span>
                           <button
                             onClick={(e) => handleUnscheduleTask(task.id, e)}
@@ -486,7 +548,7 @@ export function CalendarTimeGrid() {
 
       {/* Quick Add Dialog when clicking on a Calendar slot */}
       {selectedSlot && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-100">
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
@@ -527,3 +589,4 @@ export function CalendarTimeGrid() {
     </div>
   );
 }
+

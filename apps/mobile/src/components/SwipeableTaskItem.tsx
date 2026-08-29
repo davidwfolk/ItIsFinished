@@ -22,6 +22,7 @@ export interface TaskItemProps {
   estimatedMinutes: number | null;
   tags: string[];
   orderIndex: string;
+  section_id?: string | null;
   recurrenceRule?: string | null;
   assignedTo?: { id: string; name: string; avatarUrl?: string | null; color?: string } | null;
   onToggleComplete: (id: string) => void;
