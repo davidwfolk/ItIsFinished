@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { type TaskRow, getOrderIndexBetween } from '@app/core';
 import { 
@@ -9,7 +9,8 @@ import {
   ChevronRight, 
   GripVertical,
   Plus,
-  Trash2
+  Trash2,
+  Inbox
 } from 'lucide-react';
 
 export interface CalendarTask {
@@ -17,7 +18,7 @@ export interface CalendarTask {
   title: string;
   dateStr: string; // "YYYY-MM-DD"
   startTime: string; // "09:00"
-  durationMinutes: number; // 30, 45, 60, 90, 120
+  durationMinutes: number; // 15, 30, 45, 60, 90, 120
   priority: 1 | 2 | 3 | 4;
   project: string;
   assignedTo?: { id: string; name: string; color: string } | null;
@@ -44,6 +45,23 @@ const TEAM_MEMBERS = [
   { id: 'user-2', name: 'Sarah K.', color: '#10B981' },
   { id: 'user-3', name: 'David W.', color: '#F59E0B' },
 ];
+
+function formatHourLabel(timeStr: string): string {
+  const h = parseInt(timeStr.split(':')[0], 10);
+  if (h === 0) return '12 AM';
+  if (h < 12) return `${h} AM`;
+  if (h === 12) return '12 PM';
+  return `${h - 12} PM`;
+}
+
+function formatTimeTo12h(timeStr: string): string {
+  const [hStr, mStr] = timeStr.split(':');
+  const h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  return `${displayH}:${m} ${ampm}`;
+}
 
 export function CalendarTimeGrid() {
   const powersync = usePowerSync();
@@ -145,6 +163,7 @@ export function CalendarTimeGrid() {
   const [draggedItem, setDraggedItem] = useState<{ source: 'inbox' | 'calendar'; id: string } | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<{ dateStr: string; hour: string } | null>(null);
   const [newSlotTaskTitle, setNewSlotTaskTitle] = useState('');
+  const [inboxDropActive, setInboxDropActive] = useState(false);
 
   const priorityColors = {
     1: 'bg-red-500/20 border-red-500/50 text-red-300',
@@ -170,20 +189,25 @@ export function CalendarTimeGrid() {
     setCurrentDate(new Date());
   };
 
+  // Deterministic Week Date Range Title (e.g. "Aug 24 – Aug 30, 2026")
   const weekRangeTitle = useMemo(() => {
     if (weekDays.length === 0) return '';
     const firstDay = weekDays[0].rawDate;
     const lastDay = weekDays[weekDays.length - 1].rawDate;
     
-    const startStr = firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endStr = lastDay.toLocaleDateString('en-US', { 
-      month: firstDay.getMonth() === lastDay.getMonth() ? undefined : 'short', 
-      day: 'numeric',
-      year: 'numeric' 
-    });
-    return `${startStr} – ${endStr}`;
+    const startMonth = firstDay.toLocaleDateString('en-US', { month: 'short' });
+    const endMonth = lastDay.toLocaleDateString('en-US', { month: 'short' });
+    const startDay = firstDay.getDate();
+    const endDay = lastDay.getDate();
+    const year = lastDay.getFullYear();
+    
+    if (startMonth === endMonth) {
+      return `${startMonth} ${startDay} – ${endDay}, ${year}`;
+    }
+    return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
   }, [weekDays]);
 
+  // Convert time to pixels (60px = 1 hour)
   const getTopOffset = (startTime: string) => {
     const [h, m] = startTime.split(':').map(Number);
     const startHour = 8;
@@ -192,6 +216,7 @@ export function CalendarTimeGrid() {
     return (minutes / 60) * hourHeight;
   };
 
+  // Drag-and-Drop Handlers
   const handleDragStart = (source: 'inbox' | 'calendar', id: string, e: React.DragEvent) => {
     setDraggedItem({ source, id });
     e.dataTransfer.setData('text/plain', JSON.stringify({ source, id }));
@@ -215,6 +240,23 @@ export function CalendarTimeGrid() {
       );
     } catch (err) {
       console.error('Failed to schedule task in SQLite:', err);
+    }
+    setDraggedItem(null);
+  };
+
+  const handleDropOnInbox = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setInboxDropActive(false);
+    if (!draggedItem) return;
+
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE tasks SET due_time = NULL, updated_at = ? WHERE id = ?`,
+        [now, draggedItem.id]
+      );
+    } catch (err) {
+      console.error('Failed to unschedule task to inbox in SQLite:', err);
     }
     setDraggedItem(null);
   };
@@ -288,18 +330,28 @@ export function CalendarTimeGrid() {
 
   return (
     <div className="flex h-full w-full bg-zinc-950 overflow-hidden">
-      {/* Left Inbox Drawer (Draggable Tasks) */}
-      <div className="w-80 border-r border-zinc-800/80 bg-zinc-900/30 flex flex-col p-4">
+      {/* Left Inbox Drawer (Draggable Tasks & Drop Target to Unschedule) */}
+      <div 
+        onDragOver={(e) => {
+          handleDragOver(e);
+          if (!inboxDropActive) setInboxDropActive(true);
+        }}
+        onDragLeave={() => setInboxDropActive(false)}
+        onDrop={handleDropOnInbox}
+        className={`w-80 border-r border-zinc-800/80 bg-zinc-900/30 flex flex-col p-4 transition-all duration-150 relative ${
+          inboxDropActive ? 'bg-blue-950/20 border-r-blue-500 ring-2 ring-blue-500/30' : ''
+        }`}
+      >
         <div className="flex items-center justify-between mb-2 px-2">
           <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4 text-blue-400" /> Unscheduled Inbox
+            <Inbox className="h-4 w-4 text-blue-400" /> Unscheduled Inbox
           </h3>
           <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono">
             {inboxTasks.length}
           </span>
         </div>
         <p className="text-xs text-zinc-400 px-2 mb-4">
-          🖐️ <span className="font-semibold text-zinc-300">Drag any task</span> directly onto an hourly calendar slot to time-block it.
+          🖐️ <span className="font-semibold text-zinc-300">Drag to slot</span> to time-block, or <span className="font-semibold text-zinc-300">drag back here</span> to unschedule.
         </p>
 
         <div className="space-y-2 flex-1 overflow-y-auto pr-1">
@@ -337,8 +389,8 @@ export function CalendarTimeGrid() {
             </div>
           ))}
           {inboxTasks.length === 0 && (
-            <div className="text-center py-10 text-xs text-zinc-500 italic">
-              Inbox is clear! All tasks are time-blocked.
+            <div className="text-center py-10 text-xs text-zinc-500 italic border border-dashed border-zinc-800/80 rounded-xl p-4">
+              Inbox is clear! Drop tasks here anytime to unschedule.
             </div>
           )}
         </div>
@@ -346,10 +398,12 @@ export function CalendarTimeGrid() {
 
       {/* Main Calendar Grid Canvas */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Calendar Toolbar with Team Member Switcher */}
+        {/* Calendar Toolbar with 12h Time Range & Team Filter */}
         <div className="h-14 border-b border-zinc-800/80 px-6 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-4">
-            <h2 className="text-sm font-semibold tracking-tight">Time Blocking Grid</h2>
+            <h2 className="text-sm font-semibold tracking-tight flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4 text-blue-400" /> Time Blocking Grid
+            </h2>
             
             {/* Week Navigation */}
             <div className="flex items-center gap-1 text-xs text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
@@ -375,7 +429,7 @@ export function CalendarTimeGrid() {
               </button>
             </div>
 
-            <span className="text-xs font-mono font-semibold text-zinc-400">
+            <span className="text-xs font-mono font-semibold text-zinc-300">
               {weekRangeTitle}
             </span>
           </div>
@@ -427,7 +481,7 @@ export function CalendarTimeGrid() {
         {/* Days Header */}
         <div className="grid border-b border-zinc-800/80 bg-zinc-900/40" style={{ gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)` }}>
           <div className="p-3 text-[11px] font-mono text-zinc-500 uppercase text-center border-r border-zinc-800/60">
-            GMT
+            Time
           </div>
           {weekDays.map((day) => (
             <div
@@ -449,11 +503,11 @@ export function CalendarTimeGrid() {
         {/* Scrollable Hourly Time Grid */}
         <div className="flex-1 overflow-y-auto relative">
           <div className="grid relative min-h-[780px]" style={{ gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)` }}>
-            {/* Left Time Axis Labels */}
+            {/* Left Time Axis Labels (12-Hour AM/PM) */}
             <div className="border-r border-zinc-800/60 bg-zinc-950/60">
               {HOURS.map((hour) => (
-                <div key={hour} className="h-[60px] border-b border-zinc-800/40 pr-2 pt-1 text-right text-[10px] font-mono text-zinc-500">
-                  {hour}
+                <div key={hour} className="h-[60px] border-b border-zinc-800/40 pr-2 pt-1 text-right text-[10px] font-mono font-medium text-zinc-500">
+                  {formatHourLabel(hour)}
                 </div>
               ))}
             </div>
@@ -479,12 +533,15 @@ export function CalendarTimeGrid() {
                   </div>
                 ))}
 
-                {/* Render Scheduled Task Blocks on this Day */}
+                {/* Render Scheduled Task Blocks on this Day (Proportional Height) */}
                 {scheduledTasks
                   .filter((t) => t.dateStr === day.dateStr)
                   .map((task) => {
                     const top = getTopOffset(task.startTime);
+                    // True proportional height: 15m = 15px, 30m = 30px, 45m = 45px, 60m = 60px
                     const height = (task.durationMinutes / 60) * 60;
+                    const isUltraCompact = task.durationMinutes <= 20; // 15 min
+                    const isCompact = task.durationMinutes <= 35; // 30 min
 
                     return (
                       <div
@@ -493,50 +550,72 @@ export function CalendarTimeGrid() {
                         onDragStart={(e) => handleDragStart('calendar', task.id, e)}
                         style={{
                           top: `${top}px`,
-                          height: `${Math.max(46, height)}px`,
+                          height: `${Math.max(16, height - 2)}px`,
                         }}
-                        className={`absolute left-1 right-1 rounded-lg border p-1.5 shadow-md transition select-none flex flex-col justify-between cursor-grab active:cursor-grabbing group overflow-hidden ${
-                          priorityColors[task.priority]
-                        }`}
+                        className={`absolute left-1 right-1 rounded-md border shadow-md transition select-none flex flex-col justify-between cursor-grab active:cursor-grabbing group overflow-hidden ${
+                          isUltraCompact ? 'px-1.5 py-0.5 text-[10px]' : isCompact ? 'p-1.5 text-xs' : 'p-2 text-xs'
+                        } ${priorityColors[task.priority]}`}
                       >
-                        {/* Top Line: Full Width Task Title */}
-                        <div className="flex items-start justify-between gap-1 min-w-0">
-                          <span className="font-semibold text-xs leading-tight truncate flex-1 flex items-center gap-1">
-                            {task.assignedTo && (
-                              <span
-                                style={{ backgroundColor: task.assignedTo.color }}
-                                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
-                                title={task.assignedTo.name}
-                              />
+                        {/* Compact 15m / 30m / Full Layout */}
+                        {isUltraCompact ? (
+                          <div className="flex items-center justify-between gap-1 w-full leading-none">
+                            <span className="font-semibold text-[10px] truncate flex items-center gap-1 flex-1">
+                              {task.assignedTo && (
+                                <span
+                                  style={{ backgroundColor: task.assignedTo.color }}
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                />
+                              )}
+                              <span className="truncate">{task.title}</span>
+                            </span>
+                            <span className="font-mono text-[9px] opacity-80 shrink-0">
+                              {formatTimeTo12h(task.startTime)}
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Top Line: Task Title & Unschedule button */}
+                            <div className="flex items-start justify-between gap-1 min-w-0">
+                              <span className="font-semibold leading-tight truncate flex-1 flex items-center gap-1">
+                                {task.assignedTo && (
+                                  <span
+                                    style={{ backgroundColor: task.assignedTo.color }}
+                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                    title={task.assignedTo.name}
+                                  />
+                                )}
+                                <span className="truncate">{task.title}</span>
+                              </span>
+                              <button
+                                onClick={(e) => handleUnscheduleTask(task.id, e)}
+                                title="Unschedule back to Inbox"
+                                className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 transition shrink-0"
+                              >
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
+
+                            {/* Bottom Line: 12h Time + Project + Duration Adjuster */}
+                            {!isUltraCompact && (
+                              <div className="flex items-center justify-between text-[10px] opacity-80 font-mono gap-1 min-w-0">
+                                <span className="flex items-center gap-1 min-w-0 flex-1 truncate">
+                                  <Clock className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="shrink-0">{formatTimeTo12h(task.startTime)} •</span>
+                                  <span className="truncate">#{task.project}</span>
+                                </span>
+
+                                {/* Duration Badge (Resizer) */}
+                                <button
+                                  onClick={(e) => handleCycleDuration(task.id, e)}
+                                  title="Click to adjust duration"
+                                  className="px-1 py-0.2 rounded bg-black/60 hover:bg-black/90 font-bold transition shrink-0 whitespace-nowrap text-[9px] leading-none"
+                                >
+                                  {task.durationMinutes}m ↕
+                                </button>
+                              </div>
                             )}
-                            <span className="truncate">{task.title}</span>
-                          </span>
-                          <button
-                            onClick={(e) => handleUnscheduleTask(task.id, e)}
-                            title="Unschedule back to Inbox"
-                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 transition shrink-0"
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                          </button>
-                        </div>
-
-                        {/* Bottom Line: Time + Truncated Project with ... and Duration Pill on the right */}
-                        <div className="flex items-center justify-between text-[10px] opacity-80 font-mono gap-1 min-w-0">
-                          <span className="flex items-center gap-1 min-w-0 flex-1 truncate">
-                            <Clock className="h-2.5 w-2.5 shrink-0" />
-                            <span className="shrink-0">{task.startTime} •</span>
-                            <span className="truncate">#{task.project}</span>
-                          </span>
-
-                          {/* Duration Badge (Resizer) */}
-                          <button
-                            onClick={(e) => handleCycleDuration(task.id, e)}
-                            title="Click to adjust duration"
-                            className="px-1.5 py-0.5 rounded bg-black/60 hover:bg-black/90 font-bold transition shrink-0 whitespace-nowrap text-[9px] leading-none"
-                          >
-                            {task.durationMinutes}m ↕
-                          </button>
-                        </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
@@ -552,7 +631,7 @@ export function CalendarTimeGrid() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Plus className="h-4 w-4 text-blue-400" /> Time-Block at {selectedSlot.hour}
+                <Plus className="h-4 w-4 text-blue-400" /> Time-Block at {formatHourLabel(selectedSlot.hour)}
               </h4>
               <span className="text-xs font-mono text-zinc-500">{selectedSlot.dateStr}</span>
             </div>

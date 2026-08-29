@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -14,7 +14,7 @@ interface ScheduledBlock {
   id: string;
   title: string;
   startTime: string; // "09:00"
-  durationMinutes: number; // 60
+  durationMinutes: number; // 15, 30, 45, 60, 90
   priority: 1 | 2 | 3 | 4;
   project: string;
   assignedMember?: {
@@ -29,6 +29,23 @@ const HOURS = [
   '12:00', '13:00', '14:00', '15:00', 
   '16:00', '17:00', '18:00', '19:00', '20:00'
 ];
+
+function formatHourLabel(timeStr: string): string {
+  const h = parseInt(timeStr.split(':')[0], 10);
+  if (h === 0) return '12 AM';
+  if (h < 12) return `${h} AM`;
+  if (h === 12) return '12 PM';
+  return `${h - 12} PM`;
+}
+
+function formatTimeTo12h(timeStr: string): string {
+  const [hStr, mStr] = timeStr.split(':');
+  const h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  return `${displayH}:${m} ${ampm}`;
+}
 
 export default function CalendarScreen() {
   const [selectedDay, setSelectedDay] = useState(0); // 0 = Today, 1 = Tomorrow, 2 = Next
@@ -64,7 +81,7 @@ export default function CalendarScreen() {
       id: '3',
       title: 'Review Storage RLS & Policies',
       startTime: '11:30',
-      durationMinutes: 45,
+      durationMinutes: 30,
       priority: 2,
       project: 'Security',
       assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
@@ -80,9 +97,9 @@ export default function CalendarScreen() {
     },
     {
       id: '5',
-      title: 'Team Sync & Product Review',
+      title: 'Team Standup Sync',
       startTime: '14:30',
-      durationMinutes: 60,
+      durationMinutes: 15,
       priority: 3,
       project: 'General',
       assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
@@ -177,11 +194,11 @@ export default function CalendarScreen() {
         {/* Scrollable Time Grid */}
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
           <View style={styles.gridContainer}>
-            {/* Hour Axis */}
+            {/* Hour Axis (12-Hour AM/PM) */}
             <View style={styles.hourAxis}>
               {HOURS.map((hour) => (
                 <View key={hour} style={styles.hourRow}>
-                  <Text style={styles.hourText}>{hour}</Text>
+                  <Text style={styles.hourText}>{formatHourLabel(hour)}</Text>
                 </View>
               ))}
             </View>
@@ -202,6 +219,8 @@ export default function CalendarScreen() {
                   const top = getTopOffsetForTime(block.startTime);
                   const height = (block.durationMinutes / 60) * 60;
                   const colors = priorityColors[block.priority];
+                  const isUltraCompact = block.durationMinutes <= 20; // 15m
+                  const isCompact = block.durationMinutes <= 35; // 30m
 
                   return (
                     <TouchableOpacity
@@ -211,41 +230,54 @@ export default function CalendarScreen() {
                         styles.taskBlock,
                         {
                           top,
-                          height: Math.max(38, height),
+                          height: Math.max(16, height - 2),
                           backgroundColor: colors.bg,
                           borderColor: colors.border,
+                          padding: isUltraCompact ? 2 : isCompact ? 5 : 8,
                         },
                       ]}
                     >
-                      <View style={styles.blockHeader}>
-                        <Text style={[styles.blockTitle, { color: colors.text }]} numberOfLines={1}>
-                          {block.title}
-                        </Text>
-                        <Text style={styles.blockDuration}>{block.durationMinutes}m</Text>
-                      </View>
-                      
-                      <View style={styles.blockFooter}>
-                        <Text style={styles.blockProject} numberOfLines={1}>
-                          {block.startTime} • #{block.project}
-                        </Text>
-                        {block.assignedMember && (
-                          <View
-                            style={[
-                              styles.cardAssigneeBadge,
-                              { backgroundColor: block.assignedMember.color },
-                            ]}
-                          >
-                            <Text style={styles.cardAssigneeText}>
-                              {block.assignedMember.name
-                                .split(' ')
-                                .map((n) => n[0])
-                                .join('')
-                                .slice(0, 2)
-                                .toUpperCase()}
+                      {isUltraCompact ? (
+                        <View style={styles.ultraCompactRow}>
+                          <Text style={[styles.blockTitle, { fontSize: 10, color: colors.text }]} numberOfLines={1}>
+                            {block.title}
+                          </Text>
+                          <Text style={styles.ultraCompactTime}>
+                            {formatTimeTo12h(block.startTime)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <>
+                          <View style={styles.blockHeader}>
+                            <Text style={[styles.blockTitle, { color: colors.text }]} numberOfLines={1}>
+                              {block.title}
                             </Text>
+                            {block.assignedMember && (
+                              <View
+                                style={[
+                                  styles.assigneeAvatar,
+                                  { backgroundColor: block.assignedMember.color },
+                                ]}
+                              >
+                                <Text style={styles.assigneeText}>
+                                  {block.assignedMember.name[0]}
+                                </Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
+
+                          {!isUltraCompact && (
+                            <View style={styles.blockFooter}>
+                              <View style={styles.timeTag}>
+                                <Ionicons name="time-outline" size={10} color="#A1A1AA" />
+                                <Text style={styles.timeText}>{formatTimeTo12h(block.startTime)}</Text>
+                              </View>
+                              <Text style={styles.projectText}>#{block.project}</Text>
+                              <Text style={styles.durationText}>{block.durationMinutes}m</Text>
+                            </View>
+                          )}
+                        </>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -267,34 +299,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090B',
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#18181B',
+    borderBottomColor: '#27272A',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FAFAFA',
   },
   headerSubtitle: {
     fontSize: 11,
     color: '#71717A',
-    fontFamily: 'monospace',
+    marginTop: 1,
   },
   daySelector: {
     flexDirection: 'row',
     backgroundColor: '#18181B',
     borderRadius: 8,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: '#27272A',
+    padding: 3,
+    gap: 3,
   },
   dayTab: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
@@ -304,127 +336,157 @@ const styles = StyleSheet.create({
   dayTabText: {
     fontSize: 11,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   dayTabTextActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
   memberFilterBar: {
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#18181B',
-    backgroundColor: '#09090B',
   },
   memberFilterScroll: {
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingHorizontal: 16,
+    gap: 6,
   },
   memberFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#18181B',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#27272A',
   },
   activeMemberFilterChip: {
-    backgroundColor: '#2563EB20',
+    backgroundColor: '#27272A',
     borderColor: '#3B82F6',
   },
   memberDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   memberFilterText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#A1A1AA',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   activeMemberFilterText: {
-    color: '#60A5FA',
+    color: '#FAFAFA',
+    fontWeight: '700',
   },
   scrollArea: {
     flex: 1,
   },
   gridContainer: {
     flexDirection: 'row',
-    paddingTop: 10,
-    paddingBottom: 40,
+    minHeight: 780,
   },
   hourAxis: {
-    width: 60,
-    alignItems: 'center',
+    width: 58,
+    borderRightWidth: 1,
+    borderRightColor: '#27272A',
+    backgroundColor: '#09090B',
   },
   hourRow: {
     height: 60,
     justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingRight: 6,
+    paddingTop: 4,
   },
   hourText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#71717A',
     fontFamily: 'monospace',
+    fontWeight: '600',
   },
   canvas: {
     flex: 1,
     position: 'relative',
-    marginRight: 16,
   },
   gridLine: {
     height: 60,
-    borderTopWidth: 1,
-    borderTopColor: '#18181B',
+    borderBottomWidth: 1,
+    borderBottomColor: '#18181B',
   },
   taskBlock: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    borderRadius: 8,
+    left: 6,
+    right: 8,
+    borderRadius: 6,
     borderWidth: 1,
-    padding: 6,
     justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  ultraCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+    paddingHorizontal: 4,
+  },
+  ultraCompactTime: {
+    fontSize: 8,
+    fontFamily: 'monospace',
+    color: '#A1A1AA',
+    marginLeft: 4,
   },
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 4,
   },
   blockTitle: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     flex: 1,
   },
-  blockDuration: {
-    fontSize: 10,
-    color: '#A1A1AA',
-    fontFamily: 'monospace',
-    marginLeft: 6,
+  assigneeAvatar: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assigneeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   blockFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 4,
     marginTop: 2,
   },
-  blockProject: {
-    fontSize: 10,
+  timeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  timeText: {
+    fontSize: 9,
+    fontFamily: 'monospace',
     color: '#A1A1AA',
+  },
+  projectText: {
+    fontSize: 9,
+    color: '#71717A',
     flex: 1,
   },
-  cardAssigneeBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 6,
-  },
-  cardAssigneeText: {
-    fontSize: 7,
+  durationText: {
+    fontSize: 9,
+    fontFamily: 'monospace',
+    color: '#C084FC',
     fontWeight: '700',
-    color: '#FFFFFF',
   },
 });
+
