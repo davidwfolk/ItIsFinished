@@ -31,8 +31,10 @@ export interface TaskDetailModalProps {
     tags: string[];
     orderIndex: string;
     recurrence_rule?: string | null;
+    assigned_to?: string | null;
   } | null;
   projects: Array<{ id: string; name: string; color?: string | null }>;
+  assignees?: Array<{ id: string; name: string; color?: string }>;
   onUpdateTask: (id: string, updates: any) => void;
   onDeleteTask: (id: string) => void;
   onStartFocus?: (taskId: string, taskTitle: string) => void;
@@ -43,6 +45,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClose,
   task,
   projects,
+  assignees = [
+    { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
+    { id: 'user-sarah', name: 'Sarah K.', color: '#8B5CF6' },
+    { id: 'user-david', name: 'David W.', color: '#10B981' },
+  ],
   onUpdateTask,
   onDeleteTask,
   onStartFocus,
@@ -55,6 +62,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [assignedToId, setAssignedToId] = useState<string | null>(null);
 
   useEffect(() => {
     if (task) {
@@ -66,6 +74,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setDueTime(task.dueTime ? task.dueTime.slice(0, 5) : '');
       setEstimatedMinutes(task.estimatedMinutes || null);
       setRecurrenceRule(task.recurrence_rule || null);
+      setAssignedToId(task.assigned_to || null);
     }
   }, [task, visible]);
 
@@ -86,6 +95,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       dueTime: dueTime ? dueTime + ':00' : null,
       estimatedMinutes,
       recurrence_rule: recurrenceRule,
+      assigned_to: assignedToId,
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onClose();
@@ -222,6 +232,72 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       ]}
                     >
                       {proj.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Assignee Picker Row */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Assignee</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              <TouchableOpacity
+                onPress={() => {
+                  triggerHaptic();
+                  setAssignedToId(null);
+                }}
+                style={[
+                  styles.projectChip,
+                  assignedToId === null && styles.selectedProjectChip,
+                ]}
+              >
+                <Ionicons name="person-outline" size={14} color="#A1A1AA" />
+                <Text
+                  style={[
+                    styles.projectChipText,
+                    assignedToId === null && styles.selectedProjectChipText,
+                  ]}
+                >
+                  Unassigned
+                </Text>
+              </TouchableOpacity>
+
+              {assignees.map((user) => {
+                const isSelected = assignedToId === user.id;
+                const initials = user.name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase();
+
+                return (
+                  <TouchableOpacity
+                    key={user.id}
+                    onPress={() => {
+                      triggerHaptic();
+                      setAssignedToId(user.id);
+                    }}
+                    style={[
+                      styles.projectChip,
+                      isSelected && styles.selectedProjectChip,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.projectDot,
+                        { backgroundColor: user.color || '#3B82F6' },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.projectChipText,
+                        isSelected && styles.selectedProjectChipText,
+                      ]}
+                    >
+                      {user.name}
                     </Text>
                   </TouchableOpacity>
                 );

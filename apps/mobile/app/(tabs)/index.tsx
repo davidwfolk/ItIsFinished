@@ -12,6 +12,7 @@ import { SwipeableTaskItem, type TaskItemProps } from '../../src/components/Swip
 import { QuickAddModal } from '../../src/components/QuickAddModal';
 import { TaskDetailModal } from '../../src/components/TaskDetailModal';
 import { ProjectPickerModal, type ProjectItem } from '../../src/components/ProjectPickerModal';
+import { ProjectMembersModal, type ProjectMember } from '../../src/components/ProjectMembersModal';
 import { KanbanBoardView, type KanbanSection } from '../../src/components/KanbanBoardView';
 import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
 import { getOrderIndexBetween, calculateNextRecurrence, type ParsedTaskInput } from '@app/core';
@@ -24,11 +25,18 @@ export default function TodayScreen() {
   const router = useRouter();
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
+  const [membersModalVisible, setMembersModalVisible] = useState(false);
   const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskItemProps | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const [members, setMembers] = useState<ProjectMember[]>([
+    { id: 'user-alex', name: 'Alex M.', email: 'alex@finished.app', role: 'owner', color: '#3B82F6', isOnline: true },
+    { id: 'user-sarah', name: 'Sarah K.', email: 'sarah@finished.app', role: 'editor', color: '#8B5CF6', isOnline: true },
+    { id: 'user-david', name: 'David W.', email: 'david@finished.app', role: 'editor', color: '#10B981', isOnline: false },
+  ]);
 
   const [sections, setSections] = useState<KanbanSection[]>([
     { id: 'sec-todo', name: 'To Do', orderIndex: 'a0' },
@@ -174,14 +182,40 @@ export default function TodayScreen() {
       prev.map(t => {
         if (t.id === id) {
           const matchingProj = projects.find(p => p.id === updates.project_id);
+          const matchingMember = members.find(m => m.id === updates.assigned_to);
           return {
             ...t,
             ...updates,
             project: matchingProj ? matchingProj.name : t.project,
+            assignedTo: updates.assigned_to !== undefined
+              ? (matchingMember ? { id: matchingMember.id, name: matchingMember.name, color: matchingMember.color } : null)
+              : t.assignedTo,
           };
         }
         return t;
       })
+    );
+  };
+
+  const handleInviteMember = (email: string, role: 'editor' | 'viewer') => {
+    const newMember: ProjectMember = {
+      id: `user-${Date.now()}`,
+      name: email.split('@')[0],
+      email,
+      role,
+      color: '#F59E0B',
+      isOnline: false,
+    };
+    setMembers(prev => [...prev, newMember]);
+  };
+
+  const handleRemoveMember = (memberId: string) => {
+    setMembers(prev => prev.filter(m => m.id !== memberId));
+  };
+
+  const handleChangeRole = (memberId: string, newRole: 'editor' | 'viewer') => {
+    setMembers(prev =>
+      prev.map(m => (m.id === memberId ? { ...m, role: newRole } : m))
     );
   };
 
@@ -259,6 +293,18 @@ export default function TodayScreen() {
 
           {/* Top Right Action Controls */}
           <View style={styles.headerRightActions}>
+            {/* Team Collaboration Trigger */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setMembersModalVisible(true);
+              }}
+              style={styles.teamBtn}
+            >
+              <Ionicons name="people-outline" size={16} color="#60A5FA" />
+              <View style={styles.onlineStatusDot} />
+            </TouchableOpacity>
+
             {/* Weekly Review Wizard Trigger */}
             <TouchableOpacity
               onPress={() => {
@@ -360,12 +406,24 @@ export default function TodayScreen() {
           onUpdateTask={handleUpdateTask}
         />
 
+        {/* Project Members / Share Modal */}
+        <ProjectMembersModal
+          visible={membersModalVisible}
+          onClose={() => setMembersModalVisible(false)}
+          projectName={currentProject ? currentProject.name : "All Projects"}
+          members={members}
+          onInviteMember={handleInviteMember}
+          onRemoveMember={handleRemoveMember}
+          onChangeRole={handleChangeRole}
+        />
+
         {/* Task Detail Modal */}
         <TaskDetailModal
           visible={detailModalVisible}
           onClose={() => setDetailModalVisible(false)}
           task={selectedTask}
           projects={projects}
+          assignees={members}
           onUpdateTask={handleUpdateTask}
           onDeleteTask={handleDeleteTask}
           onStartFocus={(_taskId, _taskTitle) => {
@@ -436,6 +494,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  teamBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E3A8A25',
+    borderWidth: 1,
+    borderColor: '#3B82F640',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  onlineStatusDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
   },
   reviewBtn: {
     width: 32,

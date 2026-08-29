@@ -23,6 +23,7 @@ export interface TaskItemProps {
   tags: string[];
   orderIndex: string;
   recurrenceRule?: string | null;
+  assignedTo?: { id: string; name: string; avatarUrl?: string | null; color?: string } | null;
   onToggleComplete: (id: string) => void;
   onReschedule?: (id: string) => void;
   onPress?: (id: string) => void;
@@ -40,6 +41,7 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
   tags,
   orderIndex,
   recurrenceRule,
+  assignedTo,
   onToggleComplete,
   onReschedule,
   onPress,
@@ -161,6 +163,22 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
                   <Text style={[styles.metaText, { color: '#C084FC' }]}>
                     {estimatedMinutes}m
                   </Text>
+                </View>
+              )}
+
+              {assignedTo && (
+                <View style={[styles.metaItem, styles.assigneePill]}>
+                  <View
+                    style={[
+                      styles.assigneeAvatarSmall,
+                      { backgroundColor: assignedTo.color || '#3B82F6' },
+                    ]}
+                  >
+                    <Text style={styles.assigneeAvatarTextSmall}>
+                      {assignedTo.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.assigneeNameText}>{assignedTo.name.split(' ')[0]}</Text>
                 </View>
               )}
 
@@ -291,5 +309,31 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#0284C730',
+  },
+  assigneePill: {
+    backgroundColor: '#27272A80',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#3F3F4650',
+    gap: 4,
+  },
+  assigneeAvatarSmall: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assigneeAvatarTextSmall: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  assigneeNameText: {
+    fontSize: 10,
+    color: '#E4E4E7',
+    fontWeight: '500',
   },
 });

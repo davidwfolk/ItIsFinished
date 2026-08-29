@@ -17,6 +17,11 @@ interface ScheduledBlock {
   durationMinutes: number; // 60
   priority: 1 | 2 | 3 | 4;
   project: string;
+  assignedMember?: {
+    id: string;
+    name: string;
+    color: string;
+  };
 }
 
 const HOURS = [
@@ -27,7 +32,16 @@ const HOURS = [
 
 export default function CalendarScreen() {
   const [selectedDay, setSelectedDay] = useState(0); // 0 = Today, 1 = Tomorrow, 2 = Next
-  const [blocks, setBlocks] = useState<ScheduledBlock[]>([
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
+
+  const teamMembers = [
+    { id: 'all', name: 'Everyone', color: '#3B82F6' },
+    { id: 'user-alex', name: 'Alex (You)', color: '#3B82F6' },
+    { id: 'user-sarah', name: 'Sarah K.', color: '#8B5CF6' },
+    { id: 'user-david', name: 'David W.', color: '#10B981' },
+  ];
+
+  const [blocks] = useState<ScheduledBlock[]>([
     {
       id: '1',
       title: 'Deep Work: Core Sync Engine',
@@ -35,30 +49,52 @@ export default function CalendarScreen() {
       durationMinutes: 90,
       priority: 1,
       project: 'Core Architecture',
+      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
     },
     {
       id: '2',
+      title: 'Client Demo & Roadmap Review',
+      startTime: '10:30',
+      durationMinutes: 60,
+      priority: 2,
+      project: 'Product',
+      assignedMember: { id: 'user-sarah', name: 'Sarah K.', color: '#8B5CF6' },
+    },
+    {
+      id: '3',
       title: 'Review Storage RLS & Policies',
       startTime: '11:30',
       durationMinutes: 45,
       priority: 2,
       project: 'Security',
-    },
-    {
-      id: '3',
-      title: 'Team Sync & Product Review',
-      startTime: '14:00',
-      durationMinutes: 60,
-      priority: 3,
-      project: 'General',
+      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
     },
     {
       id: '4',
+      title: 'Database Migration & Benchmarking',
+      startTime: '13:00',
+      durationMinutes: 60,
+      priority: 1,
+      project: 'Core Architecture',
+      assignedMember: { id: 'user-david', name: 'David W.', color: '#10B981' },
+    },
+    {
+      id: '5',
+      title: 'Team Sync & Product Review',
+      startTime: '14:30',
+      durationMinutes: 60,
+      priority: 3,
+      project: 'General',
+      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
+    },
+    {
+      id: '6',
       title: 'Time-Blocking Drag & Drop Polish',
       startTime: '16:00',
       durationMinutes: 60,
       priority: 1,
       project: 'Mobile UX',
+      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
     },
   ]);
 
@@ -106,6 +142,38 @@ export default function CalendarScreen() {
           </View>
         </View>
 
+        {/* Team Member Filter Bar */}
+        <View style={styles.memberFilterBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberFilterScroll}>
+            {teamMembers.map((member) => {
+              const isSelected = selectedMemberId === member.id;
+              return (
+                <TouchableOpacity
+                  key={member.id}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedMemberId(member.id);
+                  }}
+                  style={[
+                    styles.memberFilterChip,
+                    isSelected && styles.activeMemberFilterChip,
+                  ]}
+                >
+                  <View style={[styles.memberDot, { backgroundColor: member.color }]} />
+                  <Text
+                    style={[
+                      styles.memberFilterText,
+                      isSelected && styles.activeMemberFilterText,
+                    ]}
+                  >
+                    {member.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* Scrollable Time Grid */}
         <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
           <View style={styles.gridContainer}>
@@ -125,37 +193,62 @@ export default function CalendarScreen() {
               ))}
 
               {/* Scheduled Blocks */}
-              {blocks.map((block) => {
-                const top = getTopOffsetForTime(block.startTime);
-                const height = (block.durationMinutes / 60) * 60;
-                const colors = priorityColors[block.priority];
+              {blocks
+                .filter((b) => {
+                  if (selectedMemberId === 'all') return true;
+                  return b.assignedMember?.id === selectedMemberId;
+                })
+                .map((block) => {
+                  const top = getTopOffsetForTime(block.startTime);
+                  const height = (block.durationMinutes / 60) * 60;
+                  const colors = priorityColors[block.priority];
 
-                return (
-                  <TouchableOpacity
-                    key={block.id}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.taskBlock,
-                      {
-                        top,
-                        height: Math.max(36, height),
-                        backgroundColor: colors.bg,
-                        borderColor: colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.blockHeader}>
-                      <Text style={[styles.blockTitle, { color: colors.text }]} numberOfLines={1}>
-                        {block.title}
-                      </Text>
-                      <Text style={styles.blockDuration}>{block.durationMinutes}m</Text>
-                    </View>
-                    <Text style={styles.blockProject} numberOfLines={1}>
-                      {block.startTime} • #{block.project}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                  return (
+                    <TouchableOpacity
+                      key={block.id}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.taskBlock,
+                        {
+                          top,
+                          height: Math.max(38, height),
+                          backgroundColor: colors.bg,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.blockHeader}>
+                        <Text style={[styles.blockTitle, { color: colors.text }]} numberOfLines={1}>
+                          {block.title}
+                        </Text>
+                        <Text style={styles.blockDuration}>{block.durationMinutes}m</Text>
+                      </View>
+                      
+                      <View style={styles.blockFooter}>
+                        <Text style={styles.blockProject} numberOfLines={1}>
+                          {block.startTime} • #{block.project}
+                        </Text>
+                        {block.assignedMember && (
+                          <View
+                            style={[
+                              styles.cardAssigneeBadge,
+                              { backgroundColor: block.assignedMember.color },
+                            ]}
+                          >
+                            <Text style={styles.cardAssigneeText}>
+                              {block.assignedMember.name
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')
+                                .slice(0, 2)
+                                .toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
             </View>
           </View>
         </ScrollView>
@@ -216,6 +309,44 @@ const styles = StyleSheet.create({
   dayTabTextActive: {
     color: '#FFFFFF',
   },
+  memberFilterBar: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#18181B',
+    backgroundColor: '#09090B',
+  },
+  memberFilterScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  memberFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#18181B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  activeMemberFilterChip: {
+    backgroundColor: '#2563EB20',
+    borderColor: '#3B82F6',
+  },
+  memberDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  memberFilterText: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    fontWeight: '600',
+  },
+  activeMemberFilterText: {
+    color: '#60A5FA',
+  },
   scrollArea: {
     flex: 1,
   },
@@ -253,8 +384,8 @@ const styles = StyleSheet.create({
     right: 0,
     borderRadius: 8,
     borderWidth: 1,
-    padding: 8,
-    justifyContent: 'center',
+    padding: 6,
+    justifyContent: 'space-between',
   },
   blockHeader: {
     flexDirection: 'row',
@@ -272,9 +403,28 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     marginLeft: 6,
   },
+  blockFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
   blockProject: {
     fontSize: 10,
     color: '#A1A1AA',
-    marginTop: 2,
+    flex: 1,
+  },
+  cardAssigneeBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  cardAssigneeText: {
+    fontSize: 7,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

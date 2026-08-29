@@ -162,6 +162,18 @@ export const KanbanBoardView: React.FC<KanbanBoardViewProps> = ({
                             <Ionicons name="repeat" size={11} color="#38BDF8" />
                           </View>
                         )}
+                        {task.assignedTo && (
+                          <View
+                            style={[
+                              styles.assigneeDot,
+                              { backgroundColor: task.assignedTo.color || '#3B82F6' },
+                            ]}
+                          >
+                            <Text style={styles.assigneeDotText}>
+                              {task.assignedTo.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
                       </View>
 
                       {/* Move to next column quick button */}
@@ -363,6 +375,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#A1A1AA',
     fontFamily: 'monospace',
+  },
+  assigneeDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assigneeDotText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   moveButton: {
     backgroundColor: '#1E3A8A30',
