@@ -382,26 +382,27 @@ export default function App() {
     }
   };
 
-  const handleReorderSection = async (sectionId: string, direction: 'left' | 'right') => {
-    const index = rawSections.findIndex(s => s.id === sectionId);
-    if (index === -1) return;
-    const targetIndex = direction === 'left' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= rawSections.length) return;
+  const handleReorderSection = async (sourceId: string, targetId: string) => {
+    const sourceIndex = rawSections.findIndex(s => s.id === sourceId);
+    const targetIndex = rawSections.findIndex(s => s.id === targetId);
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
 
     let newOrder: string;
-    if (direction === 'left') {
-      const prevOrder = targetIndex === 0 ? null : rawSections[targetIndex - 1].order_index;
-      const nextOrder = rawSections[targetIndex].order_index;
-      newOrder = getOrderIndexBetween(prevOrder, nextOrder);
-    } else {
+    if (sourceIndex < targetIndex) {
+      // Moving right: insert after target
       const prevOrder = rawSections[targetIndex].order_index;
       const nextOrder = targetIndex === rawSections.length - 1 ? null : rawSections[targetIndex + 1].order_index;
+      newOrder = getOrderIndexBetween(prevOrder, nextOrder);
+    } else {
+      // Moving left: insert before target
+      const prevOrder = targetIndex === 0 ? null : rawSections[targetIndex - 1].order_index;
+      const nextOrder = rawSections[targetIndex].order_index;
       newOrder = getOrderIndexBetween(prevOrder, nextOrder);
     }
 
     const now = new Date().toISOString();
     try {
-      await powersync.execute(`UPDATE sections SET order_index = ?, updated_at = ? WHERE id = ?`, [newOrder, now, sectionId]);
+      await powersync.execute(`UPDATE sections SET order_index = ?, updated_at = ? WHERE id = ?`, [newOrder, now, sourceId]);
     } catch (err) {
       console.error('Failed to reorder section in SQLite:', err);
     }
