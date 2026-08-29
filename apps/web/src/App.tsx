@@ -769,7 +769,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         {activeTab === 'calendar' ? (
-          <CalendarTimeGrid />
+          <CalendarTimeGrid onTaskClick={(id) => setSelectedTaskId(id)} />
         ) : activeTab === 'matrix' ? (
           <EisenhowerMatrixView
             tasks={tasks.map(t => ({

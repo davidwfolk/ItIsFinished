@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { type TaskRow, getOrderIndexBetween } from '@app/core';
 import { 
@@ -7,17 +7,17 @@ import {
   Folder, 
   ChevronLeft, 
   ChevronRight, 
-  GripVertical,
-  Plus,
-  Trash2,
-  Inbox
+  GripVertical, 
+  Plus, 
+  Trash2, 
+  Inbox 
 } from 'lucide-react';
 
 export interface CalendarTask {
   id: string;
   title: string;
   dateStr: string; // "YYYY-MM-DD"
-  startTime: string; // "09:00"
+  startTime: string; // "09:00" or "09:15"
   durationMinutes: number; // 15, 30, 45, 60, 90, 120
   priority: 1 | 2 | 3 | 4;
   project: string;
@@ -33,11 +33,17 @@ export interface InboxTask {
   assignedTo?: { id: string; name: string; color: string } | null;
 }
 
+export interface CalendarTimeGridProps {
+  onTaskClick?: (taskId: string) => void;
+}
+
 const HOURS = [
-  '08:00', '09:00', '10:00', '11:00', 
-  '12:00', '13:00', '14:00', '15:00', 
-  '16:00', '17:00', '18:00', '19:00', '20:00'
+  '08', '09', '10', '11', 
+  '12', '13', '14', '15', 
+  '16', '17', '18', '19', '20'
 ];
+
+const QUARTERS = ['00', '15', '30', '45'];
 
 const TEAM_MEMBERS = [
   { id: 'all', name: 'Everyone', color: '#6366F1' },
@@ -46,8 +52,8 @@ const TEAM_MEMBERS = [
   { id: 'user-3', name: 'David W.', color: '#F59E0B' },
 ];
 
-function formatHourLabel(timeStr: string): string {
-  const h = parseInt(timeStr.split(':')[0], 10);
+function formatHourLabel(hourStr: string): string {
+  const h = parseInt(hourStr, 10);
   if (h === 0) return '12 AM';
   if (h < 12) return `${h} AM`;
   if (h === 12) return '12 PM';
@@ -63,7 +69,22 @@ function formatTimeTo12h(timeStr: string): string {
   return `${displayH}:${m} ${ampm}`;
 }
 
-export function CalendarTimeGrid() {
+function calculateEndTime(startTime: string, durationMinutes: number): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const totalMinutes = h * 60 + m + durationMinutes;
+  const endH = Math.floor(totalMinutes / 60) % 24;
+  const endM = totalMinutes % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+function formatDurationLabel(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
   const powersync = usePowerSync();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'workweek' | 'fullweek'>('fullweek');
@@ -160,8 +181,10 @@ export function CalendarTimeGrid() {
       });
   }, [dbTasks, weekDays, selectedMemberId]);
 
+  const isDraggingOrResizingRef = useRef(false);
+
   const [draggedItem, setDraggedItem] = useState<{ source: 'inbox' | 'calendar'; id: string } | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<{ dateStr: string; hour: string } | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{ dateStr: string; exactTime: string } | null>(null);
   const [newSlotTaskTitle, setNewSlotTaskTitle] = useState('');
   const [inboxDropActive, setInboxDropActive] = useState(false);
 
@@ -207,7 +230,7 @@ export function CalendarTimeGrid() {
     return `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${year}`;
   }, [weekDays]);
 
-  // Convert time to pixels (60px = 1 hour)
+  // Convert time to pixels (60px = 1 hour, 15px = 15 mins)
   const getTopOffset = (startTime: string) => {
     const [h, m] = startTime.split(':').map(Number);
     const startHour = 8;
@@ -218,9 +241,16 @@ export function CalendarTimeGrid() {
 
   // Drag-and-Drop Handlers
   const handleDragStart = (source: 'inbox' | 'calendar', id: string, e: React.DragEvent) => {
+    isDraggingOrResizingRef.current = true;
     setDraggedItem({ source, id });
     e.dataTransfer.setData('text/plain', JSON.stringify({ source, id }));
     e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setTimeout(() => {
+      isDraggingOrResizingRef.current = false;
+    }, 200);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -228,20 +258,26 @@ export function CalendarTimeGrid() {
     e.dataTransfer.dropEffect = 'move';
   };
 
-  const handleDropOnSlot = async (targetDateStr: string, targetHour: string, e: React.DragEvent) => {
+  // 15-Minute Precision Drop Handler
+  const handleDropOnQuarterSlot = async (targetDateStr: string, hour: string, quarter: string, e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!draggedItem) return;
 
+    const exactTime = `${hour}:${quarter}:00`;
     const now = new Date().toISOString();
     try {
       await powersync.execute(
         `UPDATE tasks SET due_date = ?, due_time = ?, updated_at = ? WHERE id = ?`,
-        [targetDateStr, targetHour + ':00', now, draggedItem.id]
+        [targetDateStr, exactTime, now, draggedItem.id]
       );
     } catch (err) {
       console.error('Failed to schedule task in SQLite:', err);
     }
     setDraggedItem(null);
+    setTimeout(() => {
+      isDraggingOrResizingRef.current = false;
+    }, 200);
   };
 
   const handleDropOnInbox = async (e: React.DragEvent) => {
@@ -259,26 +295,91 @@ export function CalendarTimeGrid() {
       console.error('Failed to unschedule task to inbox in SQLite:', err);
     }
     setDraggedItem(null);
+    setTimeout(() => {
+      isDraggingOrResizingRef.current = false;
+    }, 200);
   };
 
-  const handleCycleDuration = async (taskId: string, e: React.MouseEvent) => {
+  // Interactive Top Edge Resize (Drag to adjust start time in 15m steps)
+  const handleTopResizeStart = (task: CalendarTask, e: React.MouseEvent) => {
     e.stopPropagation();
-    const task = scheduledTasks.find((t) => t.id === taskId);
-    if (!task) return;
+    e.preventDefault();
+    isDraggingOrResizingRef.current = true;
+    const startY = e.clientY;
+    const [origH, origM] = task.startTime.split(':').map(Number);
+    const origStartMinutes = origH * 60 + origM;
+    const origDuration = task.durationMinutes;
+    const endMinutes = origStartMinutes + origDuration;
 
-    const durations = [15, 30, 45, 60, 90, 120];
-    const currentIndex = durations.indexOf(task.durationMinutes);
-    const nextDuration = durations[(currentIndex + 1) % durations.length];
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const deltaMinutes = Math.round(deltaY / 15) * 15; // 15-minute steps
+      let newStartMinutes = origStartMinutes + deltaMinutes;
+      
+      // Clamp: minimum start 8:00 AM (480 mins), maximum end - 15m
+      newStartMinutes = Math.max(8 * 60, Math.min(endMinutes - 15, newStartMinutes));
+      const newDuration = endMinutes - newStartMinutes;
+      
+      const newH = Math.floor(newStartMinutes / 60);
+      const newM = newStartMinutes % 60;
+      const newTimeStr = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}:00`;
 
-    const now = new Date().toISOString();
-    try {
-      await powersync.execute(
-        `UPDATE tasks SET estimated_minutes = ?, updated_at = ? WHERE id = ?`,
-        [nextDuration, now, taskId]
+      powersync.execute(
+        `UPDATE tasks SET due_time = ?, estimated_minutes = ?, updated_at = ? WHERE id = ?`,
+        [newTimeStr, newDuration, new Date().toISOString(), task.id]
       );
-    } catch (err) {
-      console.error('Failed to update task duration in SQLite:', err);
+    };
+
+    const handleMouseUp = () => {
+      setTimeout(() => {
+        isDraggingOrResizingRef.current = false;
+      }, 200);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Interactive Bottom Edge Resize (Drag to adjust duration in 15m steps, e.g. 75m, 90m)
+  const handleBottomResizeStart = (task: CalendarTask, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingOrResizingRef.current = true;
+    const startY = e.clientY;
+    const origDuration = task.durationMinutes;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const deltaMinutes = Math.round(deltaY / 15) * 15; // 15-minute steps
+      const newDuration = Math.max(15, origDuration + deltaMinutes);
+
+      powersync.execute(
+        `UPDATE tasks SET estimated_minutes = ?, updated_at = ? WHERE id = ?`,
+        [newDuration, new Date().toISOString(), task.id]
+      );
+    };
+
+    const handleMouseUp = () => {
+      setTimeout(() => {
+        isDraggingOrResizingRef.current = false;
+      }, 200);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleCardClick = (taskId: string, e: React.MouseEvent) => {
+    if (isDraggingOrResizingRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
+    onTaskClick?.(taskId);
   };
 
   const handleUnscheduleTask = async (taskId: string, e: React.MouseEvent) => {
@@ -313,8 +414,8 @@ export function CalendarTimeGrid() {
           newSlotTaskTitle.trim(),
           2,
           selectedSlot.dateStr,
-          selectedSlot.hour + ':00',
-          45,
+          selectedSlot.exactTime,
+          30,
           newIndex,
           'todo',
           now,
@@ -351,7 +452,7 @@ export function CalendarTimeGrid() {
           </span>
         </div>
         <p className="text-xs text-zinc-400 px-2 mb-4">
-          🖐️ <span className="font-semibold text-zinc-300">Drag to slot</span> to time-block, or <span className="font-semibold text-zinc-300">drag back here</span> to unschedule.
+          🖐️ <span className="font-semibold text-zinc-300">Drag to slot</span> (snaps to 15m), or <span className="font-semibold text-zinc-300">drag back here</span> to unschedule.
         </p>
 
         <div className="space-y-2 flex-1 overflow-y-auto pr-1">
@@ -359,8 +460,10 @@ export function CalendarTimeGrid() {
             <div
               key={t.id}
               draggable
+              onClick={(e) => handleCardClick(t.id, e)}
               onDragStart={(e) => handleDragStart('inbox', t.id, e)}
-              className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:border-blue-500/50 hover:bg-zinc-800/80 cursor-grab active:cursor-grabbing transition text-xs space-y-1.5 shadow-md group"
+              onDragEnd={handleDragEnd}
+              className="p-3 rounded-lg border border-zinc-800 bg-zinc-900/90 hover:border-blue-500/50 hover:bg-zinc-800/80 cursor-pointer active:cursor-grabbing transition text-xs space-y-1.5 shadow-md group"
             >
               <div className="flex items-center justify-between">
                 <span className="font-medium text-zinc-200 flex items-center gap-1.5">
@@ -378,7 +481,7 @@ export function CalendarTimeGrid() {
                 {t.assignedTo && (
                   <span
                     style={{ backgroundColor: t.assignedTo.color }}
-                    className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 ml-auto"
+                    className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 ml-auto shadow-sm"
                     title={t.assignedTo.name}
                   >
                     {t.assignedTo.name.slice(0, 2).toUpperCase()}
@@ -500,7 +603,7 @@ export function CalendarTimeGrid() {
           ))}
         </div>
 
-        {/* Scrollable Hourly Time Grid */}
+        {/* Scrollable Hourly Time Grid with 15-Minute Precision Slots */}
         <div className="flex-1 overflow-y-auto relative">
           <div className="grid relative min-h-[780px]" style={{ gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)` }}>
             {/* Left Time Axis Labels (12-Hour AM/PM) */}
@@ -518,65 +621,99 @@ export function CalendarTimeGrid() {
                 key={day.dateStr}
                 className={`border-r border-zinc-800/60 relative ${day.isToday ? 'bg-blue-950/5' : ''}`}
               >
-                {/* Hourly Slots (Drop Targets) */}
+                {/* Hourly Slots (Each divided into four 15-minute sub-slots) */}
                 {HOURS.map((hour) => (
                   <div
                     key={hour}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDropOnSlot(day.dateStr, hour, e)}
-                    onClick={() => setSelectedSlot({ dateStr: day.dateStr, hour })}
-                    className="h-[60px] border-b border-zinc-800/40 hover:bg-zinc-800/20 transition cursor-pointer relative group"
+                    className="h-[60px] border-b border-zinc-800/40 relative flex flex-col"
                   >
-                    <span className="opacity-0 group-hover:opacity-100 absolute top-1 right-2 text-[10px] text-zinc-500 font-mono">
-                      + Block
-                    </span>
+                    {QUARTERS.map((quarter) => (
+                      <div
+                        key={quarter}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropOnQuarterSlot(day.dateStr, hour, quarter, e)}
+                        onClick={() => setSelectedSlot({ dateStr: day.dateStr, exactTime: `${hour}:${quarter}:00` })}
+                        className="h-[15px] border-b border-zinc-900/30 hover:bg-blue-500/10 transition cursor-pointer relative group flex items-center justify-end pr-2"
+                        title={`Time block at ${formatTimeTo12h(`${hour}:${quarter}`)}`}
+                      >
+                        <span className="opacity-0 group-hover:opacity-100 text-[8px] text-zinc-500 font-mono">
+                          +{quarter === '00' ? formatHourLabel(hour) : `:${quarter}`}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 ))}
 
-                {/* Render Scheduled Task Blocks on this Day (Proportional Height) */}
+                {/* Render Scheduled Task Blocks on this Day */}
                 {scheduledTasks
                   .filter((t) => t.dateStr === day.dateStr)
                   .map((task) => {
                     const top = getTopOffset(task.startTime);
-                    // True proportional height: 15m = 15px, 30m = 30px, 45m = 45px, 60m = 60px
+                    // True proportional height: 15m = 15px, 30m = 30px, 45m = 45px, 60m = 60px, 75m = 75px
                     const height = (task.durationMinutes / 60) * 60;
-                    const isUltraCompact = task.durationMinutes <= 20; // 15 min
-                    const isCompact = task.durationMinutes <= 35; // 30 min
+                    const isCompact = task.durationMinutes <= 35; // 15m and 30m
+                    const endTime = calculateEndTime(task.startTime, task.durationMinutes);
 
                     return (
                       <div
                         key={task.id}
                         draggable
+                        onClick={(e) => handleCardClick(task.id, e)}
                         onDragStart={(e) => handleDragStart('calendar', task.id, e)}
+                        onDragEnd={handleDragEnd}
                         style={{
                           top: `${top}px`,
-                          height: `${Math.max(16, height - 2)}px`,
+                          height: `${Math.max(15, height - 1)}px`,
                         }}
-                        className={`absolute left-1 right-1 rounded-md border shadow-md transition select-none flex flex-col justify-between cursor-grab active:cursor-grabbing group overflow-hidden ${
-                          isUltraCompact ? 'px-1.5 py-0.5 text-[10px]' : isCompact ? 'p-1.5 text-xs' : 'p-2 text-xs'
+                        className={`absolute left-0.5 right-0.5 rounded border shadow-md transition select-none cursor-pointer active:cursor-grabbing group overflow-hidden px-1.5 ${
+                          isCompact ? (task.durationMinutes <= 20 ? 'py-0' : 'pt-1 pb-0.5') : 'pt-1 pb-1'
                         } ${priorityColors[task.priority]}`}
                       >
-                        {/* Compact 15m / 30m / Full Layout */}
-                        {isUltraCompact ? (
-                          <div className="flex items-center justify-between gap-1 w-full leading-none">
-                            <span className="font-semibold text-[10px] truncate flex items-center gap-1 flex-1">
+                        {/* Top Resize Handle (Drag to adjust start time earlier/later in 15m steps) */}
+                        <div
+                          onMouseDown={(e) => handleTopResizeStart(task, e)}
+                          className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize z-20 hover:bg-blue-400/40 transition rounded-t"
+                          title="Drag top edge to adjust start time (15m increments)"
+                        />
+
+                        {/* Unschedule Hover Button (Uniform Top-Right across ALL cards) */}
+                        <button
+                          onClick={(e) => handleUnscheduleTask(task.id, e)}
+                          title="Unschedule back to Inbox"
+                          className="absolute top-0.5 right-1 opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 bg-zinc-900/90 rounded border border-white/10 transition z-10"
+                        >
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </button>
+
+                        {isCompact ? (
+                          /* Slim 1-line for 15m and 30m tasks */
+                          <div className="flex items-start justify-between gap-1.5 w-full h-full">
+                            {/* Left Side: Assignee Dot + Task Title */}
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
                               {task.assignedTo && (
                                 <span
                                   style={{ backgroundColor: task.assignedTo.color }}
-                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  className="w-1.5 h-1.5 rounded-full shrink-0 shadow-sm"
+                                  title={task.assignedTo.name}
                                 />
                               )}
-                              <span className="truncate">{task.title}</span>
-                            </span>
-                            <span className="font-mono text-[9px] opacity-80 shrink-0">
-                              {formatTimeTo12h(task.startTime)}
-                            </span>
+                              <span className="font-semibold truncate text-[11px] leading-none">
+                                {task.title}
+                              </span>
+                            </div>
+
+                            {/* Right Side: Exact same right-aligned Clock + Duration */}
+                            <div className="flex items-center gap-1 shrink-0 text-[10px] font-mono text-zinc-300 font-semibold leading-none">
+                              <Clock className="h-3 w-3 text-zinc-400 shrink-0" />
+                              <span>{formatDurationLabel(task.durationMinutes)}</span>
+                            </div>
                           </div>
-                        ) : (
-                          <>
-                            {/* Top Line: Task Title & Unschedule button */}
+                        ) : task.durationMinutes < 55 ? (
+                          /* 45m Layout: Title on top, Project & Duration on Line 2 */
+                          <div className="flex flex-col h-full w-full">
+                            {/* Line 1: Title */}
                             <div className="flex items-start justify-between gap-1 min-w-0">
-                              <span className="font-semibold leading-tight truncate flex-1 flex items-center gap-1">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 {task.assignedTo && (
                                   <span
                                     style={{ backgroundColor: task.assignedTo.color }}
@@ -584,38 +721,61 @@ export function CalendarTimeGrid() {
                                     title={task.assignedTo.name}
                                   />
                                 )}
-                                <span className="truncate">{task.title}</span>
-                              </span>
-                              <button
-                                onClick={(e) => handleUnscheduleTask(task.id, e)}
-                                title="Unschedule back to Inbox"
-                                className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 transition shrink-0"
-                              >
-                                <Trash2 className="h-2.5 w-2.5" />
-                              </button>
+                                <span className="font-bold text-xs leading-none truncate">
+                                  {task.title}
+                                </span>
+                              </div>
                             </div>
 
-                            {/* Bottom Line: 12h Time + Project + Duration Adjuster */}
-                            {!isUltraCompact && (
-                              <div className="flex items-center justify-between text-[10px] opacity-80 font-mono gap-1 min-w-0">
-                                <span className="flex items-center gap-1 min-w-0 flex-1 truncate">
-                                  <Clock className="h-2.5 w-2.5 shrink-0" />
-                                  <span className="shrink-0">{formatTimeTo12h(task.startTime)} •</span>
-                                  <span className="truncate">#{task.project}</span>
-                                </span>
-
-                                {/* Duration Badge (Resizer) */}
-                                <button
-                                  onClick={(e) => handleCycleDuration(task.id, e)}
-                                  title="Click to adjust duration"
-                                  className="px-1 py-0.2 rounded bg-black/60 hover:bg-black/90 font-bold transition shrink-0 whitespace-nowrap text-[9px] leading-none"
-                                >
-                                  {task.durationMinutes}m ↕
-                                </button>
+                            {/* Line 2: Project (left) & Duration (right) */}
+                            <div className="flex items-center justify-between text-[10px] font-mono gap-1 mt-1 min-w-0">
+                              <span className="text-[11px] font-medium text-zinc-400 truncate">
+                                #{task.project}
+                              </span>
+                              <div className="flex items-center text-zinc-300 font-semibold shrink-0 ml-2">
+                                <Clock className="h-3 w-3 mr-1 text-zinc-400 shrink-0" />
+                                <span>{formatDurationLabel(task.durationMinutes)}</span>
                               </div>
-                            )}
-                          </>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Spacious Layout for 60m, 75m, 90m, 120m+: Duration at the Bottom-Right */
+                          <div className="flex flex-col justify-between h-full w-full">
+                            {/* Top: Title with Project directly underneath */}
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                {task.assignedTo && (
+                                  <span
+                                    style={{ backgroundColor: task.assignedTo.color }}
+                                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                                    title={task.assignedTo.name}
+                                  />
+                                )}
+                                <span className="font-bold text-xs leading-none truncate">
+                                  {task.title}
+                                </span>
+                              </div>
+                              <div className="text-[11px] font-medium text-zinc-400 truncate mt-1">
+                                #{task.project}
+                              </div>
+                            </div>
+
+                            {/* Bottom: Duration aligned to the right */}
+                            <div className="flex items-center justify-end text-[10px] font-mono text-zinc-300 font-semibold">
+                              <Clock className="h-3 w-3 mr-1 text-zinc-400 shrink-0" />
+                              <span>{formatDurationLabel(task.durationMinutes)}</span>
+                            </div>
+                          </div>
                         )}
+
+                        {/* Bottom Resize Handle (Drag to adjust duration in 15m steps) */}
+                        <div
+                          onMouseDown={(e) => handleBottomResizeStart(task, e)}
+                          className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize z-20 hover:bg-blue-400/40 transition flex items-center justify-center group/resize rounded-b"
+                          title="Drag bottom edge to adjust duration (15m increments)"
+                        >
+                          <div className="w-8 h-0.5 bg-white/20 group-hover/resize:bg-white/70 rounded-full" />
+                        </div>
                       </div>
                     );
                   })}
@@ -631,7 +791,7 @@ export function CalendarTimeGrid() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                <Plus className="h-4 w-4 text-blue-400" /> Time-Block at {formatHourLabel(selectedSlot.hour)}
+                <Plus className="h-4 w-4 text-blue-400" /> Time-Block at {formatTimeTo12h(selectedSlot.exactTime.slice(0, 5))}
               </h4>
               <span className="text-xs font-mono text-zinc-500">{selectedSlot.dateStr}</span>
             </div>

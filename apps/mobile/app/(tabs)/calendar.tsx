@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -219,8 +219,7 @@ export default function CalendarScreen() {
                   const top = getTopOffsetForTime(block.startTime);
                   const height = (block.durationMinutes / 60) * 60;
                   const colors = priorityColors[block.priority];
-                  const isUltraCompact = block.durationMinutes <= 20; // 15m
-                  const isCompact = block.durationMinutes <= 35; // 30m
+                  const isCompact = block.durationMinutes <= 35; // 15m and 30m
 
                   return (
                     <TouchableOpacity
@@ -233,21 +232,26 @@ export default function CalendarScreen() {
                           height: Math.max(16, height - 2),
                           backgroundColor: colors.bg,
                           borderColor: colors.border,
-                          padding: isUltraCompact ? 2 : isCompact ? 5 : 8,
+                          padding: isCompact ? 3 : 8,
                         },
                       ]}
                     >
-                      {isUltraCompact ? (
+                      {isCompact ? (
                         <View style={styles.ultraCompactRow}>
-                          <Text style={[styles.blockTitle, { fontSize: 10, color: colors.text }]} numberOfLines={1}>
+                          <Text style={[styles.blockTitle, { fontSize: 10, color: colors.text, flex: 1 }]} numberOfLines={1}>
                             {block.title}
                           </Text>
-                          <Text style={styles.ultraCompactTime}>
-                            {formatTimeTo12h(block.startTime)}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Text style={styles.ultraCompactTime}>
+                              {formatTimeTo12h(block.startTime)}
+                            </Text>
+                            <Text style={[styles.durationText, { fontSize: 8 }]}>
+                              {block.durationMinutes}m
+                            </Text>
+                          </View>
                         </View>
                       ) : (
-                        <>
+                        <View style={{ flex: 1, justifyContent: 'space-between' }}>
                           <View style={styles.blockHeader}>
                             <Text style={[styles.blockTitle, { color: colors.text }]} numberOfLines={1}>
                               {block.title}
@@ -266,17 +270,15 @@ export default function CalendarScreen() {
                             )}
                           </View>
 
-                          {!isUltraCompact && (
-                            <View style={styles.blockFooter}>
-                              <View style={styles.timeTag}>
-                                <Ionicons name="time-outline" size={10} color="#A1A1AA" />
-                                <Text style={styles.timeText}>{formatTimeTo12h(block.startTime)}</Text>
-                              </View>
-                              <Text style={styles.projectText}>#{block.project}</Text>
-                              <Text style={styles.durationText}>{block.durationMinutes}m</Text>
+                          <View style={styles.blockFooter}>
+                            <View style={styles.timeTag}>
+                              <Ionicons name="time-outline" size={10} color="#A1A1AA" />
+                              <Text style={styles.timeText}>{formatTimeTo12h(block.startTime)}</Text>
                             </View>
-                          )}
-                        </>
+                            <Text style={styles.projectText}>#{block.project}</Text>
+                            <Text style={styles.durationText}>{block.durationMinutes}m</Text>
+                          </View>
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
