@@ -170,6 +170,34 @@ export default function TodayScreen() {
     setSections(prev => [...prev, newSec]);
   };
 
+  const handleDeleteSection = (sectionId: string) => {
+    setSections(prev => prev.filter(s => s.id !== sectionId));
+    setTasks(prev =>
+      prev.map(t => (t.section_id === sectionId ? { ...t, section_id: null } : t))
+    );
+  };
+
+  const handleRenameSection = (sectionId: string, newName: string) => {
+    setSections(prev =>
+      prev.map(s => (s.id === sectionId ? { ...s, name: newName } : s))
+    );
+  };
+
+  const handleReorderSection = (sectionId: string, direction: 'left' | 'right') => {
+    setSections(prev => {
+      const index = prev.findIndex(s => s.id === sectionId);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'left' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+
+      const nextList = [...prev];
+      const temp = nextList[index];
+      nextList[index] = nextList[targetIndex];
+      nextList[targetIndex] = temp;
+      return nextList;
+    });
+  };
+
   const handleOpenDetail = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const target = tasks.find(t => t.id === id) || null;
@@ -364,6 +392,9 @@ export default function TodayScreen() {
             onMoveTaskToSection={handleMoveTaskToSection}
             onToggleComplete={toggleTask}
             onCreateSection={handleCreateSection}
+            onDeleteSection={handleDeleteSection}
+            onRenameSection={handleRenameSection}
+            onReorderSection={handleReorderSection}
           />
         ) : (
           <FlatList

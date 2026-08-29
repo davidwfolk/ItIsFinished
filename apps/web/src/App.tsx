@@ -361,6 +361,52 @@ export default function App() {
     }
   };
 
+  const handleDeleteSection = async (sectionId: string) => {
+    const now = new Date().toISOString();
+    try {
+      // Reassign all tasks in this section to Backlog (section_id = null)
+      await powersync.execute(`UPDATE tasks SET section_id = NULL, updated_at = ? WHERE section_id = ?`, [now, sectionId]);
+      // Soft delete section
+      await powersync.execute(`UPDATE sections SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, sectionId]);
+    } catch (err) {
+      console.error('Failed to delete section in SQLite:', err);
+    }
+  };
+
+  const handleRenameSection = async (sectionId: string, newName: string) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(`UPDATE sections SET name = ?, updated_at = ? WHERE id = ?`, [newName, now, sectionId]);
+    } catch (err) {
+      console.error('Failed to rename section in SQLite:', err);
+    }
+  };
+
+  const handleReorderSection = async (sectionId: string, direction: 'left' | 'right') => {
+    const index = rawSections.findIndex(s => s.id === sectionId);
+    if (index === -1) return;
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= rawSections.length) return;
+
+    let newOrder: string;
+    if (direction === 'left') {
+      const prevOrder = targetIndex === 0 ? null : rawSections[targetIndex - 1].order_index;
+      const nextOrder = rawSections[targetIndex].order_index;
+      newOrder = getOrderIndexBetween(prevOrder, nextOrder);
+    } else {
+      const prevOrder = rawSections[targetIndex].order_index;
+      const nextOrder = targetIndex === rawSections.length - 1 ? null : rawSections[targetIndex + 1].order_index;
+      newOrder = getOrderIndexBetween(prevOrder, nextOrder);
+    }
+
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(`UPDATE sections SET order_index = ?, updated_at = ? WHERE id = ?`, [newOrder, now, sectionId]);
+    } catch (err) {
+      console.error('Failed to reorder section in SQLite:', err);
+    }
+  };
+
   const deleteTask = async (id: string) => {
     const now = new Date().toISOString();
     try {
@@ -843,6 +889,9 @@ export default function App() {
                 onMoveTaskToSection={handleMoveTaskToSection}
                 onCreateTaskInSection={handleCreateTaskInSection}
                 onCreateSection={handleCreateSection}
+                onDeleteSection={handleDeleteSection}
+                onRenameSection={handleRenameSection}
+                onReorderSection={handleReorderSection}
               />
             ) : (
               <div className="flex-1 overflow-y-auto p-8 max-w-4xl w-full mx-auto space-y-6">
