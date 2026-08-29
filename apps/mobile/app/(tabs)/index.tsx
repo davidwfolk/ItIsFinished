@@ -12,7 +12,9 @@ import { SwipeableTaskItem, type TaskItemProps } from '../../src/components/Swip
 import { QuickAddModal } from '../../src/components/QuickAddModal';
 import { TaskDetailModal } from '../../src/components/TaskDetailModal';
 import { ProjectPickerModal, type ProjectItem } from '../../src/components/ProjectPickerModal';
-import { getOrderIndexBetween, type ParsedTaskInput } from '@app/core';
+import { KanbanBoardView, type KanbanSection } from '../../src/components/KanbanBoardView';
+import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
+import { getOrderIndexBetween, calculateNextRecurrence, type ParsedTaskInput } from '@app/core';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -22,9 +24,17 @@ export default function TodayScreen() {
   const router = useRouter();
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
+  const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskItemProps | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const [sections, setSections] = useState<KanbanSection[]>([
+    { id: 'sec-todo', name: 'To Do', orderIndex: 'a0' },
+    { id: 'sec-inprog', name: 'In Progress', orderIndex: 'a1' },
+    { id: 'sec-done', name: 'Done', orderIndex: 'a2' },
+  ]);
 
   const [projects, setProjects] = useState<ProjectItem[]>([
     { id: 'proj-core-arch', name: 'Core Architecture', color: '#3B82F6', taskCount: 2 },
@@ -68,6 +78,7 @@ export default function TodayScreen() {
       dueDate: '2026-08-28',
       dueTime: '18:00:00',
       estimatedMinutes: 20,
+      recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
       tags: ['gestures', 'haptics'],
       orderIndex: 'a2',
       onToggleComplete: () => {},
@@ -85,12 +96,70 @@ export default function TodayScreen() {
       orderIndex: 'a3',
       onToggleComplete: () => {},
     },
+    {
+      id: '5',
+      title: 'Daily engineering sync and architecture review',
+      completed: false,
+      priority: 2,
+      project: 'Core Architecture',
+      dueDate: '2026-08-28',
+      dueTime: '09:00:00',
+      estimatedMinutes: 15,
+      recurrenceRule: 'FREQ=DAILY',
+      tags: ['sync', 'daily'],
+      orderIndex: 'a4',
+      onToggleComplete: () => {},
+    },
   ]);
 
   const toggleTask = (id: string) => {
-    setTasks(prev => 
-      prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
+    setTasks(prev => {
+      const target = prev.find(t => t.id === id);
+      if (!target) return prev;
+
+      const isNowCompleted = !target.completed;
+
+      // If completing a task that has a recurrence rule, spawn the next occurrence
+      if (isNowCompleted && target.recurrenceRule) {
+        const nextRecurrence = calculateNextRecurrence(
+          target.dueDate,
+          target.dueTime,
+          target.recurrenceRule
+        );
+
+        const nextTask: TaskItemProps = {
+          ...target,
+          id: `rec-${Date.now()}`,
+          completed: false,
+          dueDate: nextRecurrence.nextDueDate,
+          dueTime: nextRecurrence.nextDueTime,
+          orderIndex: getOrderIndexBetween(prev[prev.length - 1]?.orderIndex, null),
+        };
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        return [
+          ...prev.map(t => t.id === id ? { ...t, completed: true } : t),
+          nextTask,
+        ];
+      }
+
+      return prev.map(t => t.id === id ? { ...t, completed: isNowCompleted } : t);
+    });
+  };
+
+  const handleMoveTaskToSection = (taskId: string, targetSectionId: string | null) => {
+    setTasks(prev =>
+      prev.map(t => (t.id === taskId ? { ...t, section_id: targetSectionId } : t))
     );
+  };
+
+  const handleCreateSection = (name: string) => {
+    const newSec: KanbanSection = {
+      id: `sec-${Date.now()}`,
+      name,
+      orderIndex: getOrderIndexBetween(sections[sections.length - 1]?.orderIndex, null),
+    };
+    setSections(prev => [...prev, newSec]);
   };
 
   const handleOpenDetail = (id: string) => {
@@ -188,26 +257,83 @@ export default function TodayScreen() {
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.cloudBadge}>
-            <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-            <Text style={styles.cloudText}>Local-First</Text>
+          {/* Top Right Action Controls */}
+          <View style={styles.headerRightActions}>
+            {/* Weekly Review Wizard Trigger */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setWeeklyReviewVisible(true);
+              }}
+              style={styles.reviewBtn}
+            >
+              <Ionicons name="trophy-outline" size={16} color="#F59E0B" />
+            </TouchableOpacity>
+
+            {/* List / Kanban View Switcher */}
+            <View style={styles.viewToggleGroup}>
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setViewMode('list');
+                }}
+                style={[
+                  styles.viewToggleBtn,
+                  viewMode === 'list' && styles.activeViewToggleBtn,
+                ]}
+              >
+                <Ionicons
+                  name="list"
+                  size={15}
+                  color={viewMode === 'list' ? '#FFFFFF' : '#71717A'}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setViewMode('board');
+                }}
+                style={[
+                  styles.viewToggleBtn,
+                  viewMode === 'board' && styles.activeViewToggleBtn,
+                ]}
+              >
+                <Ionicons
+                  name="grid"
+                  size={14}
+                  color={viewMode === 'board' ? '#FFFFFF' : '#71717A'}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        {/* Task List */}
-        <FlatList
-          data={filteredTasks}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <SwipeableTaskItem
-              {...item}
-              onToggleComplete={toggleTask}
-              onPress={handleOpenDetail}
-            />
-          )}
-        />
+        {/* Main Content: List or Kanban Board */}
+        {viewMode === 'board' ? (
+          <KanbanBoardView
+            sections={sections}
+            tasks={filteredTasks}
+            onTaskPress={handleOpenDetail}
+            onMoveTaskToSection={handleMoveTaskToSection}
+            onToggleComplete={toggleTask}
+            onCreateSection={handleCreateSection}
+          />
+        ) : (
+          <FlatList
+            data={filteredTasks}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <SwipeableTaskItem
+                {...item}
+                onToggleComplete={toggleTask}
+                onPress={handleOpenDetail}
+              />
+            )}
+          />
+        )}
 
         {/* Floating Quick Add Button */}
         <TouchableOpacity
@@ -223,6 +349,15 @@ export default function TodayScreen() {
           visible={quickAddVisible}
           onClose={() => setQuickAddVisible(false)}
           onAddTask={handleAddTask}
+        />
+
+        {/* Weekly Review Modal */}
+        <WeeklyReviewModal
+          visible={weeklyReviewVisible}
+          onClose={() => setWeeklyReviewVisible(false)}
+          tasks={tasks}
+          projects={projects}
+          onUpdateTask={handleUpdateTask}
         />
 
         {/* Task Detail Modal */}
@@ -297,21 +432,36 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: 'monospace',
   },
-  cloudBadge: {
+  headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#064E3B30',
+    gap: 8,
+  },
+  reviewBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#78350F25',
     borderWidth: 1,
-    borderColor: '#05966940',
+    borderColor: '#F59E0B40',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleGroup: {
+    flexDirection: 'row',
+    backgroundColor: '#18181B',
+    borderRadius: 10,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  viewToggleBtn: {
+    paddingVertical: 5,
     paddingHorizontal: 8,
-    paddingVertical: 4,
     borderRadius: 8,
   },
-  cloudText: {
-    fontSize: 11,
-    color: '#34D399',
-    fontWeight: '600',
+  activeViewToggleBtn: {
+    backgroundColor: '#2563EB',
   },
   listContent: {
     paddingVertical: 12,

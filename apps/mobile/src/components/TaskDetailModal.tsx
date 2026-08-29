@@ -30,6 +30,7 @@ export interface TaskDetailModalProps {
     estimatedMinutes: number | null;
     tags: string[];
     orderIndex: string;
+    recurrence_rule?: string | null;
   } | null;
   projects: Array<{ id: string; name: string; color?: string | null }>;
   onUpdateTask: (id: string, updates: any) => void;
@@ -53,6 +54,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
 
   useEffect(() => {
     if (task) {
@@ -63,6 +65,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setDueDate(task.dueDate || '');
       setDueTime(task.dueTime ? task.dueTime.slice(0, 5) : '');
       setEstimatedMinutes(task.estimatedMinutes || null);
+      setRecurrenceRule(task.recurrence_rule || null);
     }
   }, [task, visible]);
 
@@ -82,6 +85,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       dueDate: dueDate || null,
       dueTime: dueTime ? dueTime + ':00' : null,
       estimatedMinutes,
+      recurrence_rule: recurrenceRule,
     });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onClose();
@@ -255,6 +259,44 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 );
               })}
             </View>
+          </View>
+
+          {/* Recurrence Chips */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Repeat</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {[
+                { label: 'Does not repeat', rule: null },
+                { label: 'Daily', rule: 'FREQ=DAILY' },
+                { label: 'Weekdays', rule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
+                { label: 'Weekly', rule: 'FREQ=WEEKLY' },
+                { label: 'Monthly', rule: 'FREQ=MONTHLY' },
+              ].map((item) => {
+                const isSelected = recurrenceRule === item.rule;
+                return (
+                  <TouchableOpacity
+                    key={item.label}
+                    onPress={() => {
+                      triggerHaptic();
+                      setRecurrenceRule(item.rule);
+                    }}
+                    style={[
+                      styles.durationChip,
+                      isSelected && styles.selectedDurationChip,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.durationText,
+                        isSelected && styles.selectedDurationText,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           {/* Notes / Description */}

@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { formatRecurrenceLabel } from '@app/core';
 
 export interface TaskItemProps {
   id: string;
@@ -21,6 +22,7 @@ export interface TaskItemProps {
   estimatedMinutes: number | null;
   tags: string[];
   orderIndex: string;
+  recurrenceRule?: string | null;
   onToggleComplete: (id: string) => void;
   onReschedule?: (id: string) => void;
   onPress?: (id: string) => void;
@@ -37,6 +39,7 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
   estimatedMinutes,
   tags,
   orderIndex,
+  recurrenceRule,
   onToggleComplete,
   onReschedule,
   onPress,
@@ -139,6 +142,15 @@ export const SwipeableTaskItem: React.FC<TaskItemProps> = ({
                   <Ionicons name="time-outline" size={12} color="#A1A1AA" />
                   <Text style={styles.metaText}>
                     {dueDate} {dueTime ? dueTime.slice(0, 5) : ''}
+                  </Text>
+                </View>
+              )}
+
+              {recurrenceRule && (
+                <View style={[styles.metaItem, styles.recurrencePill]}>
+                  <Ionicons name="repeat" size={12} color="#38BDF8" />
+                  <Text style={[styles.metaText, { color: '#38BDF8' }]}>
+                    {formatRecurrenceLabel(recurrenceRule)}
                   </Text>
                 </View>
               )}
@@ -271,5 +283,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#93C5FD',
     fontFamily: 'monospace',
+  },
+  recurrencePill: {
+    backgroundColor: '#0284C715',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0284C730',
   },
 });
