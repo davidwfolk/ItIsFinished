@@ -9,9 +9,7 @@ import {
   Folder, 
   Flag, 
   ListTree, 
-  MessageSquare,
   Sparkles,
-  Send,
   User,
   Timer,
   Repeat
@@ -66,15 +64,13 @@ export function TaskDetailDrawer({
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
+  
+  // Recurrence state
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<string>('');
+  
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments'>('details');
-
-  // Comments mock state
-  const [comments, setComments] = useState<Array<{ id: string; author: string; text: string; time: string }>>([
-    { id: 'c1', author: 'Alex', text: 'Started working on this task.', time: '2h ago' },
-  ]);
-  const [newComment, setNewComment] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'subtasks'>('details');
 
   useEffect(() => {
     if (task) {
@@ -85,10 +81,21 @@ export function TaskDetailDrawer({
       setDueDate(task.due_date || '');
       setDueTime(task.due_time ? task.due_time.slice(0, 5) : '');
       setEstimatedMinutes(task.estimated_minutes || null);
-      setRecurrenceRule(task.recurrence_rule || null);
+      
+      const rule = task.recurrence_rule || null;
+      let endD = '';
+      if (rule && rule.includes('UNTIL=')) {
+        const match = rule.match(/UNTIL=([0-9]{4})([0-9]{2})([0-9]{2})T/);
+        if (match) {
+          endD = `${match[1]}-${match[2]}-${match[3]}`;
+        }
+      }
+      setRecurrenceRule(rule ? rule.replace(/;UNTIL=[^;]+/, '') : null);
+      setRecurrenceEndDate(endD);
+      
       setAssignedTo(task.assigned_to || null);
     }
-  }, [task, taskId]);
+  }, [task, taskId, projects]);
 
   if (!isOpen || !task || !taskId) return null;
 
@@ -100,51 +107,63 @@ export function TaskDetailDrawer({
 
   const handleDescriptionBlur = () => {
     if (description !== (task.description || '')) {
-      onUpdateTask(taskId, { description: description.trim() });
+      onUpdateTask(taskId, { description });
     }
   };
 
-  const handlePriorityChange = (newP: 1 | 2 | 3 | 4) => {
-    setPriority(newP);
-    onUpdateTask(taskId, { priority: newP });
+  const handlePriorityChange = (p: 1 | 2 | 3 | 4) => {
+    setPriority(p);
+    onUpdateTask(taskId, { priority: p });
   };
 
-  const handleProjectChange = (newProjId: string) => {
-    setProjectId(newProjId);
-    onUpdateTask(taskId, { project_id: newProjId });
+  const handleProjectChange = (pid: string) => {
+    setProjectId(pid);
+    onUpdateTask(taskId, { project_id: pid });
   };
 
-  const handleDateChange = (newDate: string) => {
-    setDueDate(newDate);
-    onUpdateTask(taskId, { due_date: newDate || null });
+  const handleDateChange = (date: string) => {
+    setDueDate(date);
+    onUpdateTask(taskId, { due_date: date || null });
   };
 
-  const handleTimeChange = (newTime: string) => {
-    setDueTime(newTime);
-    onUpdateTask(taskId, { due_time: newTime ? newTime + ':00' : null });
+  const handleTimeChange = (time: string) => {
+    setDueTime(time);
+    onUpdateTask(taskId, { due_time: time ? `${time}:00` : null });
   };
 
-  const handleDurationChange = (duration: number | null) => {
-    setEstimatedMinutes(duration);
-    onUpdateTask(taskId, { estimated_minutes: duration });
+  const handleDurationChange = (minutes: number | null) => {
+    setEstimatedMinutes(minutes);
+    onUpdateTask(taskId, { estimated_minutes: minutes });
   };
 
-  const handleRecurrenceChange = (rule: string | null) => {
-    setRecurrenceRule(rule);
-    onUpdateTask(taskId, { recurrence_rule: rule });
+  const handleRecurrenceChange = (baseRule: string | null, endDate?: string) => {
+    const end = endDate !== undefined ? endDate : recurrenceEndDate;
+    setRecurrenceRule(baseRule);
+    if (endDate !== undefined) {
+      setRecurrenceEndDate(end);
+    }
+    
+    if (!baseRule) {
+      onUpdateTask(taskId, { recurrence_rule: null });
+    } else {
+      let finalRule = baseRule;
+      if (end) {
+        const formattedDate = end.replace(/-/g, '') + 'T235959Z';
+        finalRule += `;UNTIL=${formattedDate}`;
+      }
+      onUpdateTask(taskId, { recurrence_rule: finalRule });
+    }
   };
 
-  const handleAssigneeChange = (memberId: string | null) => {
-    setAssignedTo(memberId);
-    onUpdateTask(taskId, { assigned_to: memberId });
+  const handleAssigneeChange = (uid: string | null) => {
+    setAssignedTo(uid);
+    onUpdateTask(taskId, { assigned_to: uid });
   };
 
   const handleToggleComplete = () => {
-    const now = new Date().toISOString();
-    const isCompleted = !task.completed;
-    onUpdateTask(taskId, {
-      completed_at: isCompleted ? now : null,
-      status: isCompleted ? 'done' : 'todo',
+    onUpdateTask(taskId, { 
+      completed_at: task.completed ? null : new Date().toISOString(),
+      status: task.completed ? 'todo' : 'done'
     });
   };
 
@@ -153,21 +172,6 @@ export function TaskDetailDrawer({
       onDeleteTask(taskId);
       onClose();
     }
-  };
-
-  const handleAddComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    setComments([
-      ...comments,
-      {
-        id: crypto.randomUUID(),
-        author: 'You (Alex)',
-        text: newComment.trim(),
-        time: 'Just now',
-      },
-    ]);
-    setNewComment('');
   };
 
   const priorityStyles = {
@@ -343,10 +347,10 @@ export function TaskDetailDrawer({
           </div>
 
           {/* Repeat / Recurrence */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Repeat className="h-3.5 w-3.5 text-cyan-400" /> Repeat
+          <div className="space-y-2 p-3 bg-cyan-950/10 border border-cyan-900/30 rounded-xl">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 text-cyan-500">
+                <Repeat className="h-3.5 w-3.5" /> Repeat Schedule
               </span>
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -371,6 +375,29 @@ export function TaskDetailDrawer({
                 </button>
               ))}
             </div>
+            
+            {recurrenceRule && (
+              <div className="mt-3 pt-3 border-t border-cyan-900/30 flex items-center gap-3">
+                <span className="text-xs font-medium text-zinc-400">Ends:</span>
+                <div className="flex gap-2 items-center">
+                  <button 
+                    onClick={() => handleRecurrenceChange(recurrenceRule, '')}
+                    className={`px-3 py-1 text-xs rounded-lg border transition ${!recurrenceEndDate ? 'bg-cyan-600/20 border-cyan-500 text-cyan-300' : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-zinc-200'}`}
+                  >
+                    Never
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">or on Date:</span>
+                    <input 
+                      type="date"
+                      value={recurrenceEndDate}
+                      onChange={(e) => handleRecurrenceChange(recurrenceRule, e.target.value)}
+                      className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Assignee */}
@@ -428,7 +455,7 @@ export function TaskDetailDrawer({
             />
           </div>
 
-          {/* Tabs for Subtasks & Comments */}
+          {/* Tabs for Subtasks */}
           <div className="border-t border-zinc-800 pt-4">
             <div className="flex border-b border-zinc-800 mb-4">
               <button
@@ -451,59 +478,17 @@ export function TaskDetailDrawer({
               >
                 <ListTree className="h-3.5 w-3.5" /> Subtasks
               </button>
-              <button
-                onClick={() => setActiveTab('comments')}
-                className={`pb-2.5 px-3 text-xs font-semibold flex items-center gap-1.5 transition border-b-2 ${
-                  activeTab === 'comments'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <MessageSquare className="h-3.5 w-3.5" /> Discussion ({comments.length})
-              </button>
             </div>
 
-            {/* Subtask Tree Tab */}
-            {activeTab === 'subtasks' && (
-              <div className="space-y-3">
-                <SubtaskTree />
+            {activeTab === 'details' && (
+              <div className="py-8 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
+                <Folder className="h-6 w-6 mb-2 opacity-50" />
+                <p className="text-xs">No attachments yet</p>
               </div>
             )}
 
-            {/* Comments Tab */}
-            {activeTab === 'comments' && (
-              <div className="space-y-4">
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {comments.map((c: { id: string; author: string; text: string; time: string }) => (
-                    <div key={c.id} className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-1">
-                      <div className="flex items-center justify-between text-[11px] text-zinc-500 font-mono">
-                        <span className="font-semibold text-zinc-300 flex items-center gap-1">
-                          <User className="h-3 w-3 text-blue-400" /> {c.author}
-                        </span>
-                        <span>{c.time}</span>
-                      </div>
-                      <p className="text-xs text-zinc-300">{c.text}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <form onSubmit={handleAddComment} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Write a comment..."
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newComment.trim()}
-                    className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1 shadow-md shadow-blue-600/20"
-                  >
-                    <Send className="h-3 w-3" />
-                  </button>
-                </form>
-              </div>
+            {activeTab === 'subtasks' && (
+              <SubtaskTree taskId={taskId} />
             )}
           </div>
         </div>
@@ -511,4 +496,3 @@ export function TaskDetailDrawer({
     </div>
   );
 }
-

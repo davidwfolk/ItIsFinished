@@ -1,13 +1,7 @@
 import { useState } from 'react';
-import { MessageSquare, Send, X, Users, Trash2, CheckCircle2 } from 'lucide-react';
-
-export interface CommentItem {
-  id: string;
-  authorName: string;
-  authorEmail: string;
-  content: string;
-  createdAt: string;
-}
+import { MessageSquare, Send, X, Trash2, Edit2 } from 'lucide-react';
+import { usePowerSync, useQuery } from '@powersync/react';
+import { useAuth } from '../hooks/useAuth';
 
 export interface TaskCommentsDrawerProps {
   isOpen: boolean;
@@ -16,141 +10,210 @@ export interface TaskCommentsDrawerProps {
   taskId: string;
 }
 
-export function TaskCommentsDrawer({ isOpen, onClose, taskTitle }: TaskCommentsDrawerProps) {
+export function TaskCommentsDrawer({ isOpen, onClose, taskTitle, taskId }: TaskCommentsDrawerProps) {
   const [commentText, setCommentText] = useState('');
-  const [comments, setComments] = useState<CommentItem[]>([
-    {
-      id: 'c-1',
-      authorName: 'Sarah Lin',
-      authorEmail: 'sarah.dev@company.com',
-      content: 'I verified the PowerSync stream parameters for collaborative projects. Syncing works cleanly with zero lag.',
-      createdAt: '10 mins ago',
-    },
-    {
-      id: 'c-2',
-      authorName: 'Alex Rivera',
-      authorEmail: 'alex.design@company.com',
-      content: 'Looking great! Added the dark theme tokens for the Eisenhower quadrant borders.',
-      createdAt: 'Just now',
-    },
-  ]);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editCommentText, setEditCommentText] = useState('');
+  
+  const powersync = usePowerSync();
+  const { user } = useAuth();
 
-  // Simulated live viewers on this task
-  const liveViewers = [
-    { name: 'Sarah Lin', initial: 'S', color: 'bg-emerald-600' },
-    { name: 'Alex Rivera', initial: 'A', color: 'bg-purple-600' },
-  ];
+  // Query live comments from SQLite
+  const { data: comments = [] } = useQuery<any>(
+    `SELECT c.*, p.display_name, p.email 
+     FROM comments c
+     LEFT JOIN profiles p ON c.user_id = p.id
+     WHERE c.task_id = ? AND c.deleted_at IS NULL
+     ORDER BY c.created_at ASC`,
+    [taskId]
+  );
+
+  const currentUserId = user?.id || 'demo-user';
 
   if (!isOpen) return null;
 
-  const handlePostComment = (e: React.FormEvent) => {
+  const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
 
-    const newComment: CommentItem = {
-      id: crypto.randomUUID(),
-      authorName: 'You (Alex)',
-      authorEmail: 'you@company.com',
-      content: commentText.trim(),
-      createdAt: 'Just now',
-    };
+    const now = new Date().toISOString();
+    const newId = crypto.randomUUID();
 
-    setComments([...comments, newComment]);
-    setCommentText('');
+    try {
+      await powersync.execute(
+        `INSERT INTO comments (id, task_id, user_id, content, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [newId, taskId, currentUserId, commentText.trim(), now, now]
+      );
+      setCommentText('');
+    } catch (err) {
+      console.error('Failed to post comment:', err);
+    }
   };
 
-  const handleDeleteComment = (id: string) => {
-    setComments(comments.filter(c => c.id !== id));
+  const startEditing = (id: string, currentContent: string) => {
+    setEditingCommentId(id);
+    setEditCommentText(currentContent);
+  };
+
+  const cancelEditing = () => {
+    setEditingCommentId(null);
+    setEditCommentText('');
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    if (!editCommentText.trim()) return;
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE comments SET content = ?, updated_at = ? WHERE id = ?`,
+        [editCommentText.trim(), now, id]
+      );
+      setEditingCommentId(null);
+      setEditCommentText('');
+    } catch (err) {
+      console.error('Failed to edit comment:', err);
+    }
+  };
+
+  const handleDeleteComment = async (id: string) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+        [now, now, id]
+      );
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex justify-end z-50">
-      <div className="bg-zinc-900 border-l border-zinc-800 w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
-        {/* Drawer Header */}
-        <div className="p-5 border-b border-zinc-800 flex items-start justify-between">
-          <div className="space-y-1 min-w-0 pr-4">
-            <div className="flex items-center gap-2 text-xs text-blue-400 font-mono font-semibold">
-              <MessageSquare className="h-3.5 w-3.5" /> Task Discussion
+    <div className="fixed inset-y-0 right-0 w-full sm:w-[400px] bg-zinc-900 border-l border-zinc-800 shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out">
+      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-zinc-100 font-semibold">
+            <MessageSquare className="h-4 w-4 text-blue-400" />
+            <h2>Discussions</h2>
+          </div>
+          <p className="text-xs text-zinc-500 truncate max-w-[250px]">{taskTitle}</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {comments.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-zinc-500 space-y-3">
+            <div className="h-12 w-12 rounded-full bg-zinc-800/50 flex items-center justify-center">
+              <MessageSquare className="h-5 w-5 text-zinc-600" />
             </div>
-            <h3 className="text-base font-bold text-zinc-100 truncate">{taskTitle}</h3>
+            <p className="text-sm">No comments yet. Start the discussion!</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 p-1 transition shrink-0"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            {comments.map((comment) => {
+              const isMe = comment.user_id === currentUserId;
+              const authorName = comment.display_name || 'Guest';
+              const isEditing = editingCommentId === comment.id;
 
-        {/* Live Presence Bar */}
-        <div className="px-5 py-2.5 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between">
-          <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium">
-            <Users className="h-3.5 w-3.5 text-emerald-400 animate-pulse" /> Active Viewers:
-          </span>
-          <div className="flex items-center -space-x-1.5">
-            {liveViewers.map((viewer) => (
-              <div
-                key={viewer.name}
-                title={`${viewer.name} is currently viewing this task`}
-                className={`h-6 w-6 rounded-full ${viewer.color} border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-white shadow`}
-              >
-                {viewer.initial}
-              </div>
-            ))}
-            <span className="text-[11px] text-emerald-400 font-mono ml-3 flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3" /> Live
-            </span>
-          </div>
-        </div>
-
-        {/* Comments Stream */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {comments.map((c) => (
-            <div
-              key={c.id}
-              className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-2 group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-full bg-blue-600/30 text-blue-400 border border-blue-500/30 flex items-center justify-center text-[10px] font-bold">
-                    {c.authorName.charAt(0)}
+              return (
+                <div key={comment.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${isMe ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+                    {authorName.charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-xs font-semibold text-zinc-200">{c.authorName}</span>
+                  
+                  <div className={`flex flex-col gap-1 max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="font-semibold text-zinc-300">{isMe ? 'You' : authorName}</span>
+                      <span className="text-zinc-600 font-mono">
+                        {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    
+                    {isEditing ? (
+                      <div className="w-full bg-zinc-800 rounded-lg p-2 border border-blue-500/50">
+                        <textarea
+                          autoFocus
+                          value={editCommentText}
+                          onChange={(e) => setEditCommentText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSaveEdit(comment.id);
+                            }
+                            if (e.key === 'Escape') cancelEditing();
+                          }}
+                          className="w-full bg-transparent text-sm text-zinc-100 p-1 min-h-[60px] resize-none focus:outline-none"
+                        />
+                        <div className="flex justify-end gap-1 mt-2">
+                          <button onClick={cancelEditing} className="px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-700 rounded transition">Cancel</button>
+                          <button onClick={() => handleSaveEdit(comment.id)} className="px-2 py-1 text-xs bg-blue-600 text-white hover:bg-blue-500 rounded transition">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`p-3 rounded-2xl text-sm group ${
+                        isMe 
+                          ? 'bg-blue-600 text-white rounded-tr-sm' 
+                          : 'bg-zinc-800 text-zinc-200 rounded-tl-sm'
+                      }`}>
+                        <p className="whitespace-pre-wrap leading-relaxed">{comment.content}</p>
+                      </div>
+                    )}
+                    
+                    {/* Action Menu under the comment */}
+                    {isMe && !isEditing && (
+                      <div className="flex items-center gap-3 mt-0.5 text-[10px] text-zinc-500">
+                        <button 
+                          onClick={() => startEditing(comment.id, comment.content)}
+                          className="hover:text-blue-400 transition flex items-center gap-1"
+                        >
+                          <Edit2 className="h-3 w-3" /> Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="hover:text-red-400 transition flex items-center gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" /> Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-zinc-500">{c.createdAt}</span>
-                  <button
-                    onClick={() => handleDeleteComment(c.id)}
-                    className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition p-0.5"
-                    title="Delete comment"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs text-zinc-300 leading-relaxed">{c.content}</p>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
-        {/* Post Comment Input */}
-        <form onSubmit={handlePostComment} className="p-4 border-t border-zinc-800 bg-zinc-950">
-          <div className="relative flex items-center">
-            <input
-              type="text"
+      <div className="p-4 bg-zinc-950/80 border-t border-zinc-800">
+        <form onSubmit={handlePostComment} className="flex items-end gap-2">
+          <div className="flex-1 bg-zinc-900 border border-zinc-700 focus-within:border-blue-500 rounded-xl overflow-hidden transition">
+            <textarea
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
-              placeholder="Leave a comment or update..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-4 pr-10 py-2.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handlePostComment(e);
+                }
+              }}
+              placeholder="Write a comment... (Enter to send)"
+              className="w-full bg-transparent text-sm text-zinc-100 p-3 max-h-[120px] min-h-[44px] resize-none focus:outline-none placeholder:text-zinc-500"
+              rows={1}
             />
-            <button
-              type="submit"
-              disabled={!commentText.trim()}
-              className="absolute right-2 p-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg transition"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
           </div>
+          <button
+            type="submit"
+            disabled={!commentText.trim()}
+            className="h-[44px] w-[44px] shrink-0 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white rounded-xl flex items-center justify-center transition shadow-lg shadow-blue-600/20"
+          >
+            <Send className="h-4 w-4" />
+          </button>
         </form>
       </div>
     </div>

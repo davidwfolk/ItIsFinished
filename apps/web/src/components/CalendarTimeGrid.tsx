@@ -69,14 +69,6 @@ function formatTimeTo12h(timeStr: string): string {
   return `${displayH}:${m} ${ampm}`;
 }
 
-function calculateEndTime(startTime: string, durationMinutes: number): string {
-  const [h, m] = startTime.split(':').map(Number);
-  const totalMinutes = h * 60 + m + durationMinutes;
-  const endH = Math.floor(totalMinutes / 60) % 24;
-  const endM = totalMinutes % 60;
-  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-}
-
 function formatDurationLabel(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
   const h = Math.floor(minutes / 60);
@@ -652,7 +644,6 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
                     // True proportional height: 15m = 15px, 30m = 30px, 45m = 45px, 60m = 60px, 75m = 75px
                     const height = (task.durationMinutes / 60) * 60;
                     const isCompact = task.durationMinutes <= 35; // 15m and 30m
-                    const endTime = calculateEndTime(task.startTime, task.durationMinutes);
 
                     return (
                       <div

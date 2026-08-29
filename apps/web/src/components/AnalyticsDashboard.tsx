@@ -1,6 +1,16 @@
-import { BarChart3, Flame, Clock, CheckCircle2, TrendingUp, Zap } from 'lucide-react';
+import { BarChart3, Flame, Clock, CheckCircle2, TrendingUp, Zap, Calendar as CalendarIcon } from 'lucide-react';
+import { useQuery } from '@powersync/react';
 
 export function AnalyticsDashboard() {
+  const { data: habits = [] } = useQuery<any>(
+    `SELECT * FROM habits WHERE deleted_at IS NULL ORDER BY created_at ASC`
+  );
+  
+  // Fetch recent logs (e.g., last 40 days to cover the calendar view)
+  const { data: logs = [] } = useQuery<any>(
+    `SELECT * FROM habit_logs`
+  );
+
   const weeklyVelocity = [
     { day: 'Mon', completed: 8, target: 10 },
     { day: 'Tue', completed: 12, target: 10 },
@@ -20,16 +30,45 @@ export function AnalyticsDashboard() {
 
   const maxCompleted = Math.max(...weeklyVelocity.map(d => d.completed));
 
+  // Generate Calendar Grid
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  
+  const startOffset = (firstDay.getDay() + 6) % 7; // Monday start
+  const calendarDays = [];
+  
+  // Fill previous month days
+  for (let i = 0; i < startOffset; i++) {
+    const d = new Date(year, month, -startOffset + i + 1);
+    calendarDays.push({ date: d, isCurrentMonth: false });
+  }
+  
+  // Fill current month days
+  for (let i = 1; i <= lastDay.getDate(); i++) {
+    const d = new Date(year, month, i);
+    calendarDays.push({ date: d, isCurrentMonth: true });
+  }
+  
+  // Fill next month days to complete the grid (usually 5-6 weeks = 35 or 42 days)
+  const remaining = (calendarDays.length % 7) === 0 ? 0 : 7 - (calendarDays.length % 7);
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(year, month + 1, i);
+    calendarDays.push({ date: d, isCurrentMonth: false });
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto p-8 max-w-5xl w-full mx-auto space-y-6">
+    <div className="flex-1 overflow-y-auto p-8 max-w-5xl w-full mx-auto space-y-6 animate-in fade-in duration-200 pb-16">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
         <div>
           <h2 className="text-xl font-bold text-zinc-100 tracking-tight flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-blue-400" /> Productivity Velocity & Stats
+            <TrendingUp className="h-5 w-5 text-blue-400" /> Productivity & Consistency Hub
           </h2>
           <p className="text-xs text-zinc-400 mt-1">
-            Weekly output, priority distribution, and habit consistency metrics.
+            Weekly velocity, priority distribution, and habit analytics.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -70,15 +109,14 @@ export function AnalyticsDashboard() {
 
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span>Local Sync Health</span>
-            <Zap className="h-4 w-4 text-blue-400" />
+            <span>Task Completion Rate</span>
+            <CheckCircle2 className="h-4 w-4 text-blue-400" />
           </div>
-          <p className="text-2xl font-bold font-mono text-zinc-100">0 ms</p>
-          <span className="text-[11px] text-blue-400 font-medium">SQLite WAL Replicated</span>
+          <p className="text-2xl font-bold font-mono text-zinc-100">84%</p>
+          <span className="text-[11px] text-blue-400 font-medium">61 completed / 72 added</span>
         </div>
       </div>
 
-      {/* Weekly Velocity Bar Chart & Priority Breakdown */}
       <div className="grid grid-cols-3 gap-6">
         {/* Velocity Chart */}
         <div className="col-span-2 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-4">
@@ -127,6 +165,86 @@ export function AnalyticsDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Habit Consistency Heatmap */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl mt-8">
+        <div className="p-5 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/40">
+          <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+            <CalendarIcon className="h-4 w-4 text-purple-400" /> Habit Consistency Matrix
+          </h3>
+          <span className="text-xs font-bold text-zinc-400 uppercase font-mono">
+            {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </span>
+        </div>
+
+        <div className="p-5 overflow-x-auto custom-scrollbar">
+          {/* Day Headers */}
+          <div className="grid grid-cols-7 gap-2 mb-2 min-w-[700px]">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+              <div key={day} className="text-center text-[10px] font-bold text-zinc-500 uppercase tracking-wider font-mono">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-2 min-w-[700px]">
+            {calendarDays.map((dayInfo, i) => {
+              const dateStr = dayInfo.date.toISOString().slice(0, 10);
+              
+              // Find habits logged on this day
+              const dayLogs = habits.map((h: any) => {
+                const log = logs.find((l: any) => l.habit_id === h.id && l.log_date === dateStr);
+                const target = h.target_count || 1;
+                const count = log ? log.count : 0;
+                const pct = Math.min(100, Math.round((count / target) * 100));
+                return { habit: h, pct, count, target };
+              }).filter(item => item.pct > 0);
+
+              const isToday = dateStr === now.toISOString().slice(0, 10);
+
+              return (
+                <div 
+                  key={i} 
+                  className={`min-h-[80px] p-2 rounded-xl border flex flex-col gap-1 ${
+                    isToday ? 'border-blue-500/50 bg-blue-500/5' : 
+                    dayInfo.isCurrentMonth ? 'border-zinc-800/60 bg-zinc-950/40' : 'border-zinc-800/20 bg-zinc-950/20 opacity-50'
+                  }`}
+                >
+                  <span className={`text-xs font-mono font-bold mb-1 ${isToday ? 'text-blue-400' : 'text-zinc-500'}`}>
+                    {dayInfo.date.getDate()}
+                  </span>
+                  
+                  {/* Render Habit Bars */}
+                  <div className="space-y-1 flex-1">
+                    {dayLogs.slice(0, 5).map((logItem, idx) => {
+                      const isComplete = logItem.pct >= 100;
+                      return (
+                        <div 
+                          key={idx}
+                          title={`${logItem.habit.title} (${logItem.count}/${logItem.target})`}
+                          className={`h-1.5 rounded-full w-full ${isComplete ? '' : 'border border-dashed'}`}
+                          style={{
+                            backgroundColor: isComplete ? logItem.habit.color : 'transparent',
+                            borderColor: !isComplete ? logItem.habit.color : undefined,
+                            opacity: isComplete ? 1 : 0.6,
+                          }}
+                        />
+                      );
+                    })}
+                    
+                    {dayLogs.length > 5 && (
+                      <div className="text-[9px] font-mono font-bold text-zinc-500 text-right mt-1">
+                        +{dayLogs.length - 5}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
