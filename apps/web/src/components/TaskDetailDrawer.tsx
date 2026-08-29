@@ -13,7 +13,8 @@ import {
   Sparkles,
   Send,
   User,
-  Timer
+  Timer,
+  Repeat
 } from 'lucide-react';
 import type { TaskRow } from '@app/core';
 import { SubtaskTree } from './SubtaskTree';
@@ -32,6 +33,7 @@ export interface TaskDetailDrawerProps {
     due_date?: string | null;
     due_time?: string | null;
     estimated_minutes?: number | null;
+    recurrence_rule?: string | null;
     completed: boolean;
   } | null;
   projects: { id: string; name: string; color?: string | null }[];
@@ -57,6 +59,7 @@ export function TaskDetailDrawer({
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
+  const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments'>('details');
 
   // Comments mock state
@@ -74,6 +77,7 @@ export function TaskDetailDrawer({
       setDueDate(task.due_date || '');
       setDueTime(task.due_time ? task.due_time.slice(0, 5) : '');
       setEstimatedMinutes(task.estimated_minutes || null);
+      setRecurrenceRule(task.recurrence_rule || null);
     }
   }, [task, taskId]);
 
@@ -114,6 +118,11 @@ export function TaskDetailDrawer({
   const handleDurationChange = (duration: number | null) => {
     setEstimatedMinutes(duration);
     onUpdateTask(taskId, { estimated_minutes: duration });
+  };
+
+  const handleRecurrenceChange = (rule: string | null) => {
+    setRecurrenceRule(rule);
+    onUpdateTask(taskId, { recurrence_rule: rule });
   };
 
   const handleToggleComplete = () => {
@@ -319,6 +328,37 @@ export function TaskDetailDrawer({
             </div>
           </div>
 
+          {/* Repeat / Recurrence */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Repeat className="h-3.5 w-3.5 text-cyan-400" /> Repeat
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: 'Does not repeat', rule: null },
+                { label: 'Daily', rule: 'FREQ=DAILY' },
+                { label: 'Weekdays', rule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
+                { label: 'Weekly', rule: 'FREQ=WEEKLY' },
+                { label: 'Monthly', rule: 'FREQ=MONTHLY' },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => handleRecurrenceChange(item.rule)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    recurrenceRule === item.rule
+                      ? 'bg-cyan-600/20 border-cyan-500 text-cyan-300 font-bold'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Description & Notes */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider font-mono">
@@ -380,7 +420,7 @@ export function TaskDetailDrawer({
             {activeTab === 'comments' && (
               <div className="space-y-4">
                 <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {comments.map((c) => (
+                  {comments.map((c: { id: string; author: string; text: string; time: string }) => (
                     <div key={c.id} className="p-3 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-1">
                       <div className="flex items-center justify-between text-[11px] text-zinc-500 font-mono">
                         <span className="font-semibold text-zinc-300 flex items-center gap-1">

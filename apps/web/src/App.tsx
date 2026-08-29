@@ -1,5 +1,16 @@
 import { useState, useMemo } from 'react';
-import { parseQuickAdd, getOrderIndexBetween, DEFAULT_SMART_FILTERS, type ParsedTaskInput, type SavedSmartFilter, type TaskRow, type ProjectRow } from '@app/core';
+import { 
+  parseQuickAdd, 
+  getOrderIndexBetween, 
+  calculateNextRecurrence,
+  formatRecurrenceLabel,
+  DEFAULT_SMART_FILTERS, 
+  type ParsedTaskInput, 
+  type SavedSmartFilter, 
+  type TaskRow, 
+  type ProjectRow,
+  type SectionRow
+} from '@app/core';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { 
   CheckCircle2, 
@@ -22,7 +33,12 @@ import {
   ListTree,
   Grid,
   Edit2,
-  Timer
+  Timer,
+  Flame,
+  Trophy,
+  LayoutGrid,
+  List,
+  Repeat
 } from 'lucide-react';
 import { CalendarTimeGrid } from './components/CalendarTimeGrid';
 import { AuthModal } from './components/AuthModal';
@@ -35,6 +51,9 @@ import { EisenhowerMatrixView } from './components/EisenhowerMatrixView';
 import { ProjectModal } from './components/ProjectModal';
 import { TaskDetailDrawer } from './components/TaskDetailDrawer';
 import { FocusTimerView } from './components/FocusTimerView';
+import { WeeklyReviewModal } from './components/WeeklyReviewModal';
+import { KanbanBoardView } from './components/KanbanBoardView';
+import { HabitsTrackerView } from './components/HabitsTrackerView';
 
 export interface ViewTask {
   id: string;
@@ -46,7 +65,9 @@ export interface ViewTask {
   priority: 1 | 2 | 3 | 4;
   project: string;
   project_id?: string | null;
+  section_id?: string | null;
   description?: string | null;
+  recurrence_rule?: string | null;
   tags: string[];
   completed: boolean;
   hasSubtasks?: boolean;
@@ -54,7 +75,9 @@ export interface ViewTask {
 
 export default function App() {
   const powersync = usePowerSync();
-  const [activeTab, setActiveTab] = useState<'today' | 'calendar' | 'matrix' | 'analytics' | 'focus'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'calendar' | 'matrix' | 'analytics' | 'focus' | 'habits'>('today');
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
+  const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
   const [focusLinkedTaskId, setFocusLinkedTaskId] = useState<string | null>(null);
   const [quickAddText, setQuickAddText] = useState('');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -89,6 +112,11 @@ export default function App() {
      ORDER BY p.order_index ASC`
   );
 
+  // Live Reactive SQLite Sections Query
+  const { data: rawSections = [] } = useQuery<SectionRow>(
+    `SELECT * FROM sections WHERE deleted_at IS NULL ORDER BY order_index ASC`
+  );
+
   // Live Reactive SQLite Tasks Query
   const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
     `SELECT t.*, p.name as project_name 
@@ -111,6 +139,8 @@ export default function App() {
       priority: (t.priority || 4) as 1 | 2 | 3 | 4,
       project: t.project_name || 'Inbox',
       project_id: t.project_id,
+      section_id: t.section_id,
+      recurrence_rule: t.recurrence_rule,
       tags: [],
       completed: !!t.completed_at || t.status === 'done',
       hasSubtasks: false,
@@ -256,8 +286,78 @@ export default function App() {
         `UPDATE tasks SET completed_at = ?, status = ?, updated_at = ? WHERE id = ?`,
         [isCompleted ? now : null, isCompleted ? 'done' : 'todo', now, id]
       );
+
+      // Auto-Roll Recurrence Engine in SQLite
+      if (isCompleted && task.recurrence_rule) {
+        const next = calculateNextRecurrence(task.due_date, task.due_time, task.recurrence_rule);
+        const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
+        const newIndex = getOrderIndexBetween(lastIndex, null);
+        const nextId = `rec-${crypto.randomUUID().slice(0, 8)}`;
+
+        await powersync.execute(
+          `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            nextId,
+            task.project_id || 'proj-core-arch',
+            task.title,
+            task.priority,
+            next.nextDueDate,
+            next.nextDueTime,
+            task.estimated_minutes,
+            task.recurrence_rule,
+            newIndex,
+            'todo',
+            now,
+            now
+          ]
+        );
+      }
     } catch (err) {
       console.error('Failed to toggle task in SQLite:', err);
+    }
+  };
+
+  const handleMoveTaskToSection = async (taskId: string, sectionId: string | null) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(`UPDATE tasks SET section_id = ?, updated_at = ? WHERE id = ?`, [sectionId, now, taskId]);
+    } catch (err) {
+      console.error('Failed to move task to section in SQLite:', err);
+    }
+  };
+
+  const handleCreateTaskInSection = async (title: string, sectionId: string | null) => {
+    const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
+    const newIndex = getOrderIndexBetween(lastIndex, null);
+    const now = new Date().toISOString();
+    const newId = `task-${crypto.randomUUID().slice(0, 8)}`;
+
+    try {
+      await powersync.execute(
+        `INSERT INTO tasks (id, project_id, section_id, title, priority, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newId, selectedProjectId || 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now]
+      );
+    } catch (err) {
+      console.error('Failed to insert section task in SQLite:', err);
+    }
+  };
+
+  const handleCreateSection = async (name: string) => {
+    const lastIndex = rawSections.length > 0 ? rawSections[rawSections.length - 1].order_index : null;
+    const newIndex = getOrderIndexBetween(lastIndex, null);
+    const now = new Date().toISOString();
+    const newId = `sec-${crypto.randomUUID().slice(0, 8)}`;
+
+    try {
+      await powersync.execute(
+        `INSERT INTO sections (id, project_id, name, order_index, is_collapsed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [newId, selectedProjectId || 'proj-core-arch', name, newIndex, 0, now, now]
+      );
+    } catch (err) {
+      console.error('Failed to create section in SQLite:', err);
     }
   };
 
@@ -465,6 +565,19 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => { setActiveTab('habits'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
+              activeTab === 'habits'
+                ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
+                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Flame className="h-4 w-4 text-orange-400" /> Daily Habits
+            </span>
+          </button>
+
+          <button
             onClick={() => { setActiveTab('analytics'); setSelectedProjectId(null); setSelectedFilterId(null); }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
               activeTab === 'analytics'
@@ -621,6 +734,8 @@ export default function App() {
           <AnalyticsDashboard />
         ) : activeTab === 'focus' ? (
           <FocusTimerView initialTaskId={focusLinkedTaskId} />
+        ) : activeTab === 'habits' ? (
+          <HabitsTrackerView />
         ) : (
           <>
             {/* Header */}
@@ -652,6 +767,36 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Sunday Weekly Review Trigger */}
+                  <button
+                    onClick={() => setWeeklyReviewOpen(true)}
+                    className="px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-xs text-amber-400 flex items-center gap-1.5 transition font-semibold"
+                  >
+                    <Trophy className="h-3.5 w-3.5" /> Weekly Review
+                  </button>
+
+                  {/* List / Kanban View Switcher */}
+                  <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800">
+                    <button
+                      onClick={() => setViewMode('list')}
+                      className={`p-1.5 rounded-md transition ${
+                        viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      title="List View"
+                    >
+                      <List className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('board')}
+                      className={`p-1.5 rounded-md transition ${
+                        viewMode === 'board' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                      title="Kanban Board View"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
                   {selectedProject && (
                     <button
                       onClick={() => { setEditingProject(selectedProject); setProjectModalOpen(true); }}
@@ -688,184 +833,210 @@ export default function App() {
               )}
             </header>
 
-            {/* Tasks Container */}
-            <div className="flex-1 overflow-y-auto p-8 max-w-4xl w-full mx-auto space-y-6">
-              {/* NLP Quick Add Bar */}
-              <form onSubmit={handleAddTask} className="relative">
-                <div className="relative rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 shadow-2xl focus-within:border-blue-500/60 transition focus-within:ring-1 focus-within:ring-blue-500/30">
-                  <div className="flex items-center px-3 py-1.5 gap-2">
-                    <Sparkles className="h-4 w-4 text-blue-400 shrink-0 animate-pulse" />
-                    <input
-                      type="text"
-                      value={quickAddText}
-                      onChange={(e) => setQuickAddText(e.target.value)}
-                      placeholder={selectedProject ? `Quick add to #${selectedProject.name}: 'Review specs tomorrow 30m p1'` : "Quick add: 'Ship MVP tomorrow at 3pm for 45m #Core @urgent p1'"}
-                      className="w-full bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!quickAddText.trim()}
-                      className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-medium flex items-center gap-1 transition"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add
-                    </button>
-                  </div>
-
-                  {/* Live NLP Tokenizer Preview */}
-                  {quickAddText.trim() && (
-                    <div className="border-t border-zinc-800/80 px-3 py-2 bg-zinc-900/90 rounded-b-lg flex flex-wrap gap-2 text-xs items-center">
-                      <span className="text-zinc-500 text-[11px] uppercase tracking-wider font-mono">Parsed:</span>
-                      {parsedPreview.dueDate && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
-                          <Calendar className="h-3 w-3" /> {parsedPreview.dueDate} {parsedPreview.dueTime || ''}
-                        </span>
-                      )}
-                      {parsedPreview.estimatedMinutes && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">
-                          <Clock className="h-3 w-3" /> {parsedPreview.estimatedMinutes}m
-                        </span>
-                      )}
-                      {parsedPreview.projectName && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <Folder className="h-3 w-3" /> #{parsedPreview.projectName}
-                        </span>
-                      )}
-                      {parsedPreview.tags.map(t => (
-                        <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
-                          <Tag className="h-3 w-3" /> @{t}
-                        </span>
-                      ))}
-                      {parsedPreview.priority && (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold font-mono ${priorityColors[parsedPreview.priority]}`}>
-                          P{parsedPreview.priority}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </form>
-
-              {/* Draggable Task List */}
-              <div className="space-y-3">
-                {displayTasks.map((task) => (
-                  <div key={task.id} className="space-y-2">
-                    <div
-                      draggable
-                      onDragStart={(e) => handleDragStart(task.id, e)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDropOnTask(task.id, e)}
-                      className="group flex items-start gap-3 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-blue-500/40 transition cursor-grab active:cursor-grabbing shadow-sm"
-                    >
-                      <GripVertical className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 mt-0.5 shrink-0" />
-
+            {/* Tasks Container or Kanban Board */}
+            {viewMode === 'board' ? (
+              <KanbanBoardView
+                sections={rawSections}
+                tasks={displayTasks}
+                onTaskClick={(id) => setSelectedTaskId(id)}
+                onToggleComplete={toggleTask}
+                onMoveTaskToSection={handleMoveTaskToSection}
+                onCreateTaskInSection={handleCreateTaskInSection}
+                onCreateSection={handleCreateSection}
+              />
+            ) : (
+              <div className="flex-1 overflow-y-auto p-8 max-w-4xl w-full mx-auto space-y-6">
+                {/* NLP Quick Add Bar */}
+                <form onSubmit={handleAddTask} className="relative">
+                  <div className="relative rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 shadow-2xl focus-within:border-blue-500/60 transition focus-within:ring-1 focus-within:ring-blue-500/30">
+                    <div className="flex items-center px-3 py-1.5 gap-2">
+                      <Sparkles className="h-4 w-4 text-blue-400 shrink-0 animate-pulse" />
+                      <input
+                        type="text"
+                        value={quickAddText}
+                        onChange={(e) => setQuickAddText(e.target.value)}
+                        placeholder={selectedProject ? `Quick add to #${selectedProject.name}: 'Review specs tomorrow 30m p1'` : "Quick add: 'Ship MVP tomorrow at 3pm for 45m #Core @urgent p1'"}
+                        className="w-full bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+                      />
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleTask(task.id);
-                        }}
-                        className="mt-0.5 text-zinc-500 hover:text-blue-400 transition shrink-0"
+                        type="submit"
+                        disabled={!quickAddText.trim()}
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-medium flex items-center gap-1 transition"
                       >
-                        {task.completed ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                        ) : (
-                          <Circle className="h-4 w-4" />
-                        )}
+                        <Plus className="h-3.5 w-3.5" /> Add
                       </button>
-
-                      {/* Task Body (Click to open TaskDetailDrawer) */}
-                      <div 
-                        onClick={() => setSelectedTaskId(task.id)}
-                        className="flex-1 min-w-0 cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium hover:text-blue-300 transition ${task.completed ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
-                            {task.title}
-                          </span>
-                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${priorityColors[task.priority]}`}>
-                            P{task.priority}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
-                          <span className="flex items-center gap-1 text-zinc-400">
-                            <Folder className="h-3 w-3" /> {task.project}
-                          </span>
-                          {task.due_date && (
-                            <span className="flex items-center gap-1 text-zinc-400 font-mono">
-                              <Calendar className="h-3 w-3" /> {task.due_date} {task.due_time ? task.due_time.slice(0, 5) : ''}
-                            </span>
-                          )}
-                          {task.estimated_minutes && (
-                            <span className="flex items-center gap-1 text-purple-400/80 font-mono">
-                              <Clock className="h-3 w-3" /> {task.estimated_minutes}m
-                            </span>
-                          )}
-                          {task.tags.map(tag => (
-                            <span key={tag} className="text-zinc-400 font-mono">
-                              #{tag}
-                            </span>
-                          ))}
-                          <span className="ml-auto font-mono text-[10px] text-zinc-500 font-bold">
-                            idx: {task.order_index}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        {/* Subtask Expander Toggle */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedSubtaskId(expandedSubtaskId === task.id ? null : task.id);
-                          }}
-                          title="Toggle Subtask Tree"
-                          className={`p-1 transition ${expandedSubtaskId === task.id ? 'text-purple-400' : 'text-zinc-500 hover:text-purple-400'}`}
-                        >
-                          <ListTree className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveCommentTask(task);
-                          }}
-                          title="Discussion & Comments"
-                          className="p-1 hover:text-blue-400 text-zinc-500 transition"
-                        >
-                          <MessageSquare className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTask(task.id);
-                          }}
-                          title="Delete Task"
-                          className="p-1 hover:text-red-400 text-zinc-600 transition"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
                     </div>
 
-                    {/* Render Expanded Subtask Tree */}
-                    {expandedSubtaskId === task.id && (
-                      <div className="pl-6 pt-1">
-                        <SubtaskTree />
+                    {/* Live NLP Tokenizer Preview */}
+                    {quickAddText.trim() && (
+                      <div className="border-t border-zinc-800/80 px-3 py-2 bg-zinc-900/90 rounded-b-lg flex flex-wrap gap-2 text-xs items-center">
+                        <span className="text-zinc-500 text-[11px] uppercase tracking-wider font-mono">Parsed:</span>
+                        {parsedPreview.dueDate && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                            <Calendar className="h-3 w-3" /> {parsedPreview.dueDate} {parsedPreview.dueTime || ''}
+                          </span>
+                        )}
+                        {parsedPreview.estimatedMinutes && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">
+                            <Clock className="h-3 w-3" /> {parsedPreview.estimatedMinutes}m
+                          </span>
+                        )}
+                        {parsedPreview.projectName && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <Folder className="h-3 w-3" /> #{parsedPreview.projectName}
+                          </span>
+                        )}
+                        {parsedPreview.tags.map(t => (
+                          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                            <Tag className="h-3 w-3" /> @{t}
+                          </span>
+                        ))}
+                        {parsedPreview.priority && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold font-mono ${priorityColors[parsedPreview.priority]}`}>
+                            P{parsedPreview.priority}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
-                ))}
+                </form>
 
-                {displayTasks.length === 0 && (
-                  <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl p-8 space-y-2">
-                    <p className="text-sm text-zinc-400 font-medium">No tasks in this view</p>
-                    <p className="text-xs text-zinc-600">Use the quick add bar above to create your first task!</p>
-                  </div>
-                )}
+                {/* Draggable Task List */}
+                <div className="space-y-3">
+                  {displayTasks.map((task) => (
+                    <div key={task.id} className="space-y-2">
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(task.id, e)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDropOnTask(task.id, e)}
+                        className="group flex items-start gap-3 p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-blue-500/40 transition cursor-grab active:cursor-grabbing shadow-sm"
+                      >
+                        <GripVertical className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 mt-0.5 shrink-0" />
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTask(task.id);
+                          }}
+                          className="mt-0.5 text-zinc-500 hover:text-blue-400 transition shrink-0"
+                        >
+                          {task.completed ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            <Circle className="h-4 w-4" />
+                          )}
+                        </button>
+
+                        {/* Task Body (Click to open TaskDetailDrawer) */}
+                        <div 
+                          onClick={() => setSelectedTaskId(task.id)}
+                          className="flex-1 min-w-0 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium hover:text-blue-300 transition ${task.completed ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                              {task.title}
+                            </span>
+                            <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-semibold ${priorityColors[task.priority]}`}>
+                              P{task.priority}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
+                            <span className="flex items-center gap-1 text-zinc-400">
+                              <Folder className="h-3 w-3" /> {task.project}
+                            </span>
+                            {task.due_date && (
+                              <span className="flex items-center gap-1 text-zinc-400 font-mono">
+                                <Calendar className="h-3 w-3" /> {task.due_date} {task.due_time ? task.due_time.slice(0, 5) : ''}
+                              </span>
+                            )}
+                            {task.recurrence_rule && (
+                              <span className="flex items-center gap-1 text-cyan-400 font-mono" title={formatRecurrenceLabel(task.recurrence_rule)}>
+                                <Repeat className="h-3 w-3" /> {formatRecurrenceLabel(task.recurrence_rule)}
+                              </span>
+                            )}
+                            {task.estimated_minutes && (
+                              <span className="flex items-center gap-1 text-purple-400/80 font-mono">
+                                <Clock className="h-3 w-3" /> {task.estimated_minutes}m
+                              </span>
+                            )}
+                            {task.tags.map(tag => (
+                              <span key={tag} className="text-zinc-400 font-mono">
+                                #{tag}
+                              </span>
+                            ))}
+                            <span className="ml-auto font-mono text-[10px] text-zinc-500 font-bold">
+                              idx: {task.order_index}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {/* Subtask Expander Toggle */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedSubtaskId(expandedSubtaskId === task.id ? null : task.id);
+                            }}
+                            title="Toggle Subtask Tree"
+                            className={`p-1 transition ${expandedSubtaskId === task.id ? 'text-purple-400' : 'text-zinc-500 hover:text-purple-400'}`}
+                          >
+                            <ListTree className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveCommentTask(task);
+                            }}
+                            title="Discussion & Comments"
+                            className="p-1 hover:text-blue-400 text-zinc-500 transition"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteTask(task.id);
+                            }}
+                            title="Delete Task"
+                            className="p-1 hover:text-red-400 text-zinc-600 transition"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Render Expanded Subtask Tree */}
+                      {expandedSubtaskId === task.id && (
+                        <div className="pl-6 pt-1">
+                          <SubtaskTree />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {displayTasks.length === 0 && (
+                    <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl p-8 space-y-2">
+                      <p className="text-sm text-zinc-400 font-medium">No tasks in this view</p>
+                      <p className="text-xs text-zinc-600">Use the quick add bar above to create your first task!</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </>
         )}
       </main>
+
+      {/* Weekly Review Modal */}
+      <WeeklyReviewModal
+        isOpen={weeklyReviewOpen}
+        onClose={() => setWeeklyReviewOpen(false)}
+        tasks={rawTasks}
+        projects={rawProjects}
+        onUpdateTask={handleUpdateTask}
+      />
 
       {/* Task Detail & Edit Slide-Over Drawer */}
       <TaskDetailDrawer

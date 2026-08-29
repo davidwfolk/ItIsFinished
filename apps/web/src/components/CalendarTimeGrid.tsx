@@ -438,34 +438,39 @@ export function CalendarTimeGrid() {
                         onDragStart={(e) => handleDragStart('calendar', task.id, e)}
                         style={{
                           top: `${top}px`,
-                          height: `${Math.max(40, height)}px`,
+                          height: `${Math.max(46, height)}px`,
                         }}
-                        className={`absolute left-1 right-1 rounded-lg border p-2 shadow-xl transition select-none flex flex-col justify-between cursor-grab active:cursor-grabbing group ${
+                        className={`absolute left-1 right-1 rounded-lg border p-1.5 shadow-md transition select-none flex flex-col justify-between cursor-grab active:cursor-grabbing group overflow-hidden ${
                           priorityColors[task.priority]
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-1">
-                          <span className="font-semibold text-xs leading-tight truncate">
+                        {/* Top Line: Full Width Task Title */}
+                        <div className="flex items-start justify-between gap-1 min-w-0">
+                          <span className="font-semibold text-xs leading-tight truncate flex-1">
                             {task.title}
                           </span>
                           <button
                             onClick={(e) => handleUnscheduleTask(task.id, e)}
                             title="Unschedule back to Inbox"
-                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 transition"
+                            className="opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 transition shrink-0"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-2.5 w-2.5" />
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] opacity-80 font-mono">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-2.5 w-2.5" /> {task.startTime} • #{task.project}
+                        {/* Bottom Line: Time + Truncated Project with ... and Duration Pill on the right */}
+                        <div className="flex items-center justify-between text-[10px] opacity-80 font-mono gap-1 min-w-0">
+                          <span className="flex items-center gap-1 min-w-0 flex-1 truncate">
+                            <Clock className="h-2.5 w-2.5 shrink-0" />
+                            <span className="shrink-0">{task.startTime} •</span>
+                            <span className="truncate">#{task.project}</span>
                           </span>
-                          {/* Duration Badge with Resize click trigger */}
+
+                          {/* Duration Badge (Resizer) */}
                           <button
                             onClick={(e) => handleCycleDuration(task.id, e)}
                             title="Click to adjust duration"
-                            className="px-1.5 py-0.2 rounded bg-black/40 hover:bg-black/80 font-bold transition"
+                            className="px-1.5 py-0.5 rounded bg-black/60 hover:bg-black/90 font-bold transition shrink-0 whitespace-nowrap text-[9px] leading-none"
                           >
                             {task.durationMinutes}m ↕
                           </button>
