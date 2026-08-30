@@ -25,10 +25,4 @@ export const connector = new SupabasePowerSyncConnector({
  */
 export async function initDatabase() {
   await powersync.init();
-  
-  // Connect to backend sync stream (non-blocking)
-  powersync.connect(connector).catch(err => {
-    console.warn('PowerSync sync stream offline/waiting for credentials:', err.message);
-  });
-
-  }
+}

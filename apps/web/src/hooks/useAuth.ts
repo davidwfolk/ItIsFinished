@@ -38,13 +38,6 @@ export function useAuth(): UseAuthReturn {
       setUser(currentSession?.user ?? null);
       if (currentSession?.user) {
         await fetchMfaFactors();
-        
-        // WAKE UP POWERSYNC ON INITIAL LOAD IF LOGGED IN
-        import('../lib/powersync').then(({ powersync, connector }) => {
-          if (!powersync.connected) {
-            powersync.connect(connector).catch(console.error);
-          }
-        });
       } else {
         setMfaFactors([]);
       }
@@ -65,19 +58,8 @@ export function useAuth(): UseAuthReturn {
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
         await fetchMfaFactors();
-        
-        // WAKE UP POWERSYNC ON LOGIN
-        import('../lib/powersync').then(({ powersync, connector }) => {
-          if (!powersync.connected) {
-            powersync.connect(connector).catch(console.error);
-          }
-        });
       } else {
         setMfaFactors([]);
-        // DISCONNECT ON LOGOUT
-        import('../lib/powersync').then(({ powersync }) => {
-          powersync.disconnect();
-        });
       }
       setLoading(false);
     });

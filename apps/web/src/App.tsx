@@ -1,8 +1,20 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Workspace } from './pages/Workspace';
 import { SettingsPage } from './pages/SettingsPage';
 import { LandingPage } from './components/LandingPage';
 import { useAuth } from './hooks/useAuth';
+import { powersync, connector } from './lib/powersync';
+
+function PowerSyncManager() {
+  useEffect(() => {
+    powersync.connect(connector).catch(console.error);
+    return () => {
+      powersync.disconnect();
+    };
+  }, []);
+  return null;
+}
 
 function AuthRedirect({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -41,7 +53,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/?login=true" replace />;
   }
   
-  return <>{children}</>;
+  return (
+    <>
+      <PowerSyncManager />
+      {children}
+    </>
+  );
 }
 
 export default function App() {
