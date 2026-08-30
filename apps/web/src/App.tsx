@@ -6,12 +6,14 @@ import { LandingPage } from './components/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { powersync, connector } from './lib/powersync';
 
+let connectionInitiated = false;
+
 function PowerSyncManager() {
   useEffect(() => {
-    powersync.connect(connector).catch(console.error);
-    return () => {
-      powersync.disconnect();
-    };
+    if (!connectionInitiated) {
+      connectionInitiated = true;
+      powersync.connect(connector).catch(console.error);
+    }
   }, []);
   return null;
 }

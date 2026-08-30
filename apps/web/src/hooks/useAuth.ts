@@ -72,6 +72,9 @@ export function useAuth(): UseAuthReturn {
   const signOut = useCallback(async () => {
     try {
       await authManager.signOut();
+      import('../lib/powersync').then(({ powersync }) => {
+        powersync.disconnect();
+      });
       setUser(null);
       setSession(null);
       setMfaFactors([]);
