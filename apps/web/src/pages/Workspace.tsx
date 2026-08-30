@@ -874,7 +874,7 @@ export function Workspace() {
                         setProjectModalOpen(true);
                       }}
                       title="Edit Project"
-                      className="opacity-0 group-hover:opacity-100 hover:text-blue-400 p-0.5 transition"
+                      className="opacity-50 group-hover:opacity-100 hover:text-blue-400 p-0.5 transition"
                     >
                       <Edit2 className="h-3 w-3" />
                     </button>
@@ -920,7 +920,7 @@ export function Workspace() {
                       <span className="truncate">{filter.name}</span>
                     </span>
                     
-                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                    <div className="flex items-center gap-1.5 shrink-0 opacity-50 group-hover:opacity-100 transition">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
