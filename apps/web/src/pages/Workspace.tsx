@@ -873,6 +873,7 @@ export function Workspace() {
               title: t.title,
               priority: t.priority,
               project: t.project,
+                  projectColor: t.projectColor,
               dueDate: t.due_date,
               dueTime: t.due_time,
               estimatedMinutes: t.estimated_minutes,

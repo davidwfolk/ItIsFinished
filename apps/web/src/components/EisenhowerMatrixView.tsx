@@ -17,6 +17,7 @@ export interface MatrixTask {
   title: string;
   priority: 1 | 2 | 3 | 4;
   project: string;
+  projectColor?: string;
   dueDate: string | null;
   dueTime: string | null;
   estimatedMinutes: number | null;
@@ -219,7 +220,7 @@ export function EisenhowerMatrixView({
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-zinc-200 truncate">{task.title}</p>
                       <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
-                        <span className="flex items-center gap-1 text-zinc-400 truncate">
+                        <span className="flex items-center gap-1 font-medium truncate" style={{ color: task.projectColor || '#a1a1aa' }}>
                           <Folder className="h-2.5 w-2.5" /> {task.project}
                         </span>
                         {task.dueDate && (
