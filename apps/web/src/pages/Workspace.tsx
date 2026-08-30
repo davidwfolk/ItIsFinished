@@ -46,6 +46,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { CalendarTimeGrid } from '../components/CalendarTimeGrid';
 import { AuthModal } from '../components/AuthModal';
+import { SettingsModal } from '../components/SettingsModal';
 import { MfaSetupModal } from '../components/MfaSetupModal';
 import { ProjectMembersModal } from '../components/ProjectMembersModal';
 import { TaskCommentsDrawer } from '../components/TaskCommentsDrawer';
@@ -113,7 +114,10 @@ export function Workspace() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mfaModalOpen, setMfaModalOpen] = useState(false);
   const [membersModalOpen, setMembersModalOpen] = useState(false);
+
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
   const [activeCommentTask, setActiveCommentTask] = useState<ViewTask | null>(null);
   const [smartFilters, setSmartFilters] = useState<SavedSmartFilter[]>(DEFAULT_SMART_FILTERS);
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
@@ -609,8 +613,18 @@ export function Workspace() {
                 <span>{hasMfa ? '2FA Active' : 'Set up 2FA'}</span>
               </button>
 
+
+              <button
+                onClick={() => setSettingsModalOpen(true)}
+                title="Settings"
+                className="text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+              
               <button
                 onClick={signOut}
+
                 title="Sign Out"
                 className="text-zinc-500 hover:text-red-400 transition flex items-center gap-1"
               >
@@ -1290,23 +1304,24 @@ export function Workspace() {
         onDelete={handleDeleteProject}
       />
 
+      
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         onSuccess={async () => {
           await refreshAuth();
           const { data } = await supabase.auth.getUser();
-          const newUser = data.user;
-          if (newUser) {
-            const now = new Date().toISOString();
-            await powersync.execute(`UPDATE projects SET owner_id = ?, updated_at = ? WHERE owner_id = ?`, [newUser.id, now, 'demo-user']);
-            await powersync.execute(`UPDATE tasks SET created_by = ?, updated_at = ? WHERE created_by = ?`, [newUser.id, now, 'demo-user']);
-            await powersync.execute(`UPDATE tags SET user_id = ?, updated_at = ? WHERE user_id = ?`, [newUser.id, now, 'demo-user']);
-            await powersync.execute(`UPDATE habits SET user_id = ?, updated_at = ? WHERE user_id = ?`, [newUser.id, now, 'demo-user']);
-            await powersync.execute(`UPDATE saved_filters SET user_id = ?, updated_at = ? WHERE user_id = ?`, [newUser.id, now, 'demo-user']);
+          if (data.user) {
+            setAuthModalOpen(false);
           }
         }}
       />
+      
+      <SettingsModal
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+      />
+
 
       {/* Two-Factor MFA Security Modal */}
       <MfaSetupModal
