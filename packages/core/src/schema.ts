@@ -12,6 +12,7 @@ export const profiles = new Table({
 });
 
 export const projects = new Table({
+  workspace_id: column.text,
   owner_id: column.text,
   name: column.text,
   color: column.text,
@@ -33,6 +34,7 @@ export const project_members = new Table({
 });
 
 export const sections = new Table({
+  workspace_id: column.text,
   project_id: column.text,
   name: column.text,
   order_index: column.text,
@@ -43,6 +45,7 @@ export const sections = new Table({
 });
 
 export const tasks = new Table({
+  workspace_id: column.text,
   project_id: column.text,
   section_id: column.text,
   parent_id: column.text,
@@ -66,6 +69,7 @@ export const tasks = new Table({
 });
 
 export const tags = new Table({
+  workspace_id: column.text,
   user_id: column.text,
   name: column.text,
   color: column.text,
@@ -81,6 +85,7 @@ export const task_tags = new Table({
 });
 
 export const habits = new Table({
+  workspace_id: column.text,
   user_id: column.text,
   title: column.text,
   icon: column.text,
@@ -131,6 +136,7 @@ export const focus_sessions = new Table({
 });
 
 export const saved_filters = new Table({
+  workspace_id: column.text,
   user_id: column.text,
   name: column.text,
   icon: column.text,
@@ -142,8 +148,36 @@ export const saved_filters = new Table({
   updated_at: column.text
 });
 
+export const workspaces = new Table({
+  name: column.text,
+  is_personal: column.integer,
+  deleted_at: column.text,
+  created_at: column.text,
+  updated_at: column.text
+});
+
+export const workspace_members = new Table({
+  workspace_id: column.text,
+  user_id: column.text,
+  role: column.text,
+  created_at: column.text,
+  updated_at: column.text
+});
+
+export const time_blocks = new Table({
+  user_id: column.text,
+  task_id: column.text,
+  date: column.text,
+  start_time: column.text,
+  end_time: column.text,
+  created_at: column.text,
+  updated_at: column.text
+});
+
 export const AppSchema = new Schema({
   profiles,
+  workspaces,
+  workspace_members,
   projects,
   project_members,
   sections,
@@ -155,7 +189,8 @@ export const AppSchema = new Schema({
   comments,
   attachments,
   focus_sessions,
-  saved_filters
+  saved_filters,
+  time_blocks
 });
 
 export type DatabaseSchema = typeof AppSchema;
