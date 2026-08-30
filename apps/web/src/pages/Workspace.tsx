@@ -119,23 +119,43 @@ export function Workspace() {
   // Live Supabase Auth & Session Hook
   const { user, signOut, refreshAuth } = useAuth();
 
-  // Live Reactive SQLite Saved Filters Query
-  const { data: rawSavedFilters = [] } = useQuery<any>(
-    `SELECT * FROM saved_filters WHERE deleted_at IS NULL ORDER BY order_index ASC`
+  // Live Reactive SQLite Saved Filters Query (Including deleted ones for tombstones)
+  const { data: rawAllSavedFilters = [] } = useQuery<any>(
+    `SELECT * FROM saved_filters ORDER BY order_index ASC`
   );
 
   const smartFilters = useMemo(() => {
-    return [
-      ...DEFAULT_SMART_FILTERS,
-      ...rawSavedFilters.map(f => ({
+    const dbMap = new Map(rawAllSavedFilters.map(f => [f.id, f]));
+    
+    // 1. Process defaults (override with DB version, or remove if tombstoned)
+    const processedDefaults = DEFAULT_SMART_FILTERS.map(df => {
+      if (dbMap.has(df.id)) {
+        const dbRow = dbMap.get(df.id);
+        if (dbRow.deleted_at) return null; // Tombstoned by user
+        return {
+          id: dbRow.id,
+          name: dbRow.name,
+          color: dbRow.color,
+          icon: dbRow.icon,
+          rule: typeof dbRow.query_rules === 'string' ? JSON.parse(dbRow.query_rules) : dbRow.query_rules
+        };
+      }
+      return df;
+    }).filter(Boolean) as SavedSmartFilter[];
+
+    // 2. Add purely custom filters (not in defaults, not deleted)
+    const customDbFilters = rawAllSavedFilters
+      .filter(f => !f.deleted_at && !DEFAULT_SMART_FILTERS.some(df => df.id === f.id))
+      .map(f => ({
         id: f.id,
         name: f.name,
         color: f.color,
         icon: f.icon,
         rule: typeof f.query_rules === 'string' ? JSON.parse(f.query_rules) : f.query_rules
-      }))
-    ];
-  }, [rawSavedFilters]);
+      }));
+
+    return [...processedDefaults, ...customDbFilters];
+  }, [rawAllSavedFilters]);
 
   // Live Reactive SQLite Projects Query with Task Counts
   const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
@@ -267,11 +287,11 @@ export function Workspace() {
       
       if (existing) {
         await powersync.execute(
-          `UPDATE saved_filters SET name = ?, color = ?, icon = ?, query_rules = ?, updated_at = ? WHERE id = ?`,
+          `UPDATE saved_filters SET name = ?, color = ?, icon = ?, query_rules = ?, updated_at = ?, deleted_at = NULL WHERE id = ?`,
           [filter.name, filter.color, filter.icon, JSON.stringify(filter.rule), now, filter.id]
         );
       } else {
-        const lastIndex = rawSavedFilters.length > 0 ? rawSavedFilters[rawSavedFilters.length - 1].order_index : null;
+        const lastIndex = rawAllSavedFilters.length > 0 ? rawAllSavedFilters[rawAllSavedFilters.length - 1].order_index : null;
         const newIndex = getOrderIndexBetween(lastIndex, null);
         
         await powersync.execute(
@@ -289,8 +309,21 @@ export function Workspace() {
 
   const handleDeleteFilter = async (id: string) => {
     const now = new Date().toISOString();
+    const currentUserId = user?.id || 'demo-user';
     try {
-      await powersync.execute(`UPDATE saved_filters SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+      const existing = await powersync.getOptional(`SELECT id FROM saved_filters WHERE id = ?`, [id]);
+      if (existing) {
+        await powersync.execute(`UPDATE saved_filters SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+      } else {
+        // Tombstone for default filter
+        const lastIndex = rawAllSavedFilters.length > 0 ? rawAllSavedFilters[rawAllSavedFilters.length - 1].order_index : null;
+        const newIndex = getOrderIndexBetween(lastIndex, null);
+        await powersync.execute(
+          `INSERT INTO saved_filters (id, user_id, name, query_rules, order_index, deleted_at, created_at, updated_at) 
+           VALUES (?, ?, ?, '{}', ?, ?, ?, ?)`, 
+          [id, currentUserId, 'default-tombstone', newIndex, now, now, now]
+        );
+      }
       if (selectedFilterId === id) setSelectedFilterId(null);
     } catch (err) {
       console.error('Failed to delete smart filter in SQLite:', err);
@@ -868,7 +901,6 @@ export function Workspace() {
             </div>
             <div className="space-y-1 mt-1.5">
               {smartFilters.map(filter => {
-                const isCustom = !filter.id.startsWith('filter-');
                 return (
                   <div
                     key={filter.id}
@@ -888,33 +920,29 @@ export function Workspace() {
                       <span className="truncate">{filter.name}</span>
                     </span>
                     
-                    {isCustom ? (
-                      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingFilter(filter);
-                            setFilterModalOpen(true);
-                          }}
-                          title="Edit Filter"
-                          className="hover:text-blue-400 p-0.5 transition"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteFilter(filter.id);
-                          }}
-                          title="Delete Filter"
-                          className="hover:text-red-400 p-0.5 transition"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <Filter className="h-3 w-3 opacity-40 shrink-0" />
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingFilter(filter);
+                          setFilterModalOpen(true);
+                        }}
+                        title="Edit Filter"
+                        className="hover:text-blue-400 p-0.5 transition"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteFilter(filter.id);
+                        }}
+                        title="Delete Filter"
+                        className="hover:text-red-400 p-0.5 transition"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
