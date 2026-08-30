@@ -14,9 +14,15 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
   const powersync = usePowerSync();
 
   // Fetch all workspaces the user has access to
-  const { data: workspaces = [] } = useQuery<{ id: string; name: string; is_personal: number }>(
+  const { data: workspaces = [], error } = useQuery<{ id: string; name: string; is_personal: number }>(
     `SELECT * FROM workspaces ORDER BY is_personal DESC, name ASC`
   );
+
+  useEffect(() => {
+    console.log("[Workspace Debug] Workspaces from SQLite:", workspaces);
+    if (error) console.error("[Workspace Debug] SQLite Query Error:", error);
+    console.log("[Workspace Debug] PowerSync Connection Status:", powersync.connected);
+  }, [workspaces, error, powersync.connected]);
 
   useEffect(() => {
     // If no workspace is active, default to the Personal workspace
