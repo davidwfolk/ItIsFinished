@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Workspace } from './pages/Workspace';
+import { SettingsPage } from './pages/SettingsPage';
 import { LandingPage } from './components/LandingPage';
 import { useAuth } from './hooks/useAuth';
 
@@ -53,6 +54,15 @@ export default function App() {
             <AuthRedirect>
               <LandingPage />
             </AuthRedirect>
+          } 
+        />
+        
+        <Route 
+          path="/app/settings" 
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
+            </ProtectedRoute>
           } 
         />
         <Route 
