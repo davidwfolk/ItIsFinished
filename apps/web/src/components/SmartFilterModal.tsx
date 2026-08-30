@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Filter, X, Plus, Check, Code, Save } from 'lucide-react';
-import { compileFilterToSql, type FilterRule, type SavedSmartFilter } from '@app/core';
+import { Filter, X, Plus, Check, Save } from 'lucide-react';
+import { type FilterRule, type SavedSmartFilter } from '@app/core';
 
 export interface SmartFilterModalProps {
   isOpen: boolean;
@@ -38,8 +38,6 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter 
     dueBefore: dueBefore as any,
     includeCompleted: false,
   };
-
-  const compiled = compileFilterToSql(currentRule);
 
   const togglePriority = (p: 1 | 2 | 3 | 4) => {
     if (selectedPriorities.includes(p)) {
@@ -169,16 +167,6 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter 
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Live Compiled SQL Preview */}
-          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 space-y-1">
-            <span className="text-[10px] font-mono uppercase text-zinc-500 flex items-center gap-1">
-              <Code className="h-3 w-3" /> Compiled SQLite Query:
-            </span>
-            <code className="text-[11px] font-mono text-emerald-400 block truncate">
-              SELECT * FROM tasks {compiled.sql || 'WHERE deleted_at IS NULL'}
-            </code>
           </div>
 
           <button
