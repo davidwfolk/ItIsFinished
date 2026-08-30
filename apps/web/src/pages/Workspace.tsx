@@ -22,10 +22,8 @@ import {
   Plus, 
   Sparkles, 
   Zap, 
-  ShieldCheck, 
   GripVertical,
   Trash2,
-  Users,
   MessageSquare,
   LogIn,
   TrendingUp,
@@ -40,16 +38,13 @@ import {
   List,
   Repeat,
   LogOut,
-  Key,
   Menu,
   Settings,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 import { CalendarTimeGrid } from '../components/CalendarTimeGrid';
 import { AuthModal } from '../components/AuthModal';
-import { SettingsModal } from '../components/SettingsModal';
-import { MfaSetupModal } from '../components/MfaSetupModal';
-import { ProjectMembersModal } from '../components/ProjectMembersModal';
 import { TaskCommentsDrawer } from '../components/TaskCommentsDrawer';
 import { SmartFilterModal } from '../components/SmartFilterModal';
 import { SubtaskTree } from '../components/SubtaskTree';
@@ -94,6 +89,7 @@ const TEAM_MEMBERS = [
 import { supabase } from '../lib/powersync';
 
 export function Workspace() {
+  const navigate = useNavigate();
   const powersync = usePowerSync();
   const [activeTab, setActiveTab] = useState<'today' | 'all' | 'calendar' | 'matrix' | 'analytics' | 'focus' | 'habits'>('today');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -113,18 +109,14 @@ export function Workspace() {
 
   // Modals & Drawers State
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [mfaModalOpen, setMfaModalOpen] = useState(false);
-  const [membersModalOpen, setMembersModalOpen] = useState(false);
-
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   const [activeCommentTask, setActiveCommentTask] = useState<ViewTask | null>(null);
   const [smartFilters, setSmartFilters] = useState<SavedSmartFilter[]>(DEFAULT_SMART_FILTERS);
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
 
   // Live Supabase Auth & Session Hook
-  const { user, mfaFactors, hasMfa, signOut, refreshAuth } = useAuth();
+  const { user, signOut, refreshAuth } = useAuth();
 
   // Live Reactive SQLite Projects Query with Task Counts
   const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
@@ -569,15 +561,7 @@ export function Workspace() {
             </div>
           </div>
 
-          {user ? (
-            <button
-              onClick={() => setMfaModalOpen(true)}
-              title="Security & Two-Factor Auth"
-              className="p-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-400 hover:text-zinc-200 transition"
-            >
-              <Key className="h-3.5 w-3.5" />
-            </button>
-          ) : (
+          {!user && (
             <button
               onClick={() => setAuthModalOpen(true)}
               title="Sign In / Register"
@@ -605,18 +589,7 @@ export function Workspace() {
 
             <div className="flex items-center justify-between pt-1.5 border-t border-zinc-900 text-[11px]">
               <button
-                onClick={() => setMfaModalOpen(true)}
-                className={`flex items-center gap-1.5 font-medium transition ${
-                  hasMfa ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>{hasMfa ? '2FA Active' : 'Set up 2FA'}</span>
-              </button>
-
-
-              <button
-                onClick={() => setSettingsModalOpen(true)}
+                onClick={() => navigate('/app/settings')}
                 title="Settings"
                 className="text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1"
               >
@@ -757,17 +730,7 @@ export function Workspace() {
             </span>
           </button>
 
-          <button
-            onClick={() => setMembersModalOpen(true)}
-            className="w-full px-2.5 py-2 rounded-lg text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200 flex items-center justify-between transition"
-          >
-            <span className="flex items-center gap-2">
-              <Users className="h-4 w-4" /> Team Members
-            </span>
-            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-              3
-            </span>
-          </button>
+
 
 
 
@@ -974,29 +937,6 @@ export function Workspace() {
                       <Edit2 className="h-3.5 w-3.5 text-zinc-400" /> Project Settings
                     </button>
                   )}
-                  {/* Online Collaborator Stack */}
-                  <div 
-                    onClick={() => setMembersModalOpen(true)}
-                    className="flex items-center -space-x-1.5 cursor-pointer hover:opacity-80 transition"
-                    title="Team Collaborators"
-                  >
-                    {TEAM_MEMBERS.map((m) => (
-                      <div
-                        key={m.id}
-                        style={{ backgroundColor: m.color }}
-                        className="w-6 h-6 rounded-full border-2 border-zinc-950 text-[8px] font-bold text-white flex items-center justify-center shadow-sm relative"
-                      >
-                        {m.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => setMembersModalOpen(true)}
-                    className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-xs text-zinc-300 flex items-center gap-1.5 transition font-medium"
-                  >
-                    <Users className="h-3.5 w-3.5 text-blue-400" /> Share Project
-                  </button>
                 </div>
               </div>
 
@@ -1318,27 +1258,6 @@ export function Workspace() {
         }}
       />
       
-      <SettingsModal
-        isOpen={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-      />
-
-
-      {/* Two-Factor MFA Security Modal */}
-      <MfaSetupModal
-        isOpen={mfaModalOpen}
-        onClose={() => setMfaModalOpen(false)}
-        factors={mfaFactors}
-        onMfaChanged={refreshAuth}
-      />
-
-      {/* Project Members / Share Modal */}
-      <ProjectMembersModal
-        isOpen={membersModalOpen}
-        onClose={() => setMembersModalOpen(false)}
-        projectName={selectedProject?.name || "Core Architecture"}
-      />
-
       {/* Smart Filter Builder Modal */}
       <SmartFilterModal
         isOpen={filterModalOpen}
