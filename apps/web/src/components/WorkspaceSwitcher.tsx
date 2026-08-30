@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { useQuery } from '@powersync/react';
+import { useQuery, usePowerSync } from '@powersync/react';
+import { supabase } from '../lib/powersync';
 import { ChevronDown, Briefcase, User as UserIcon, Check } from 'lucide-react';
 
 interface WorkspaceSwitcherProps {
@@ -10,6 +11,7 @@ interface WorkspaceSwitcherProps {
 export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const powersync = usePowerSync();
 
   // Fetch all workspaces the user has access to
   const { data: workspaces = [] } = useQuery<{ id: string; name: string; is_personal: number }>(
@@ -36,7 +38,42 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
 
-  if (workspaces.length === 0) return null;
+  if (workspaces.length === 0) {
+    return (
+      <div className="w-full flex flex-col gap-2 p-3 rounded-xl bg-red-950/20 border border-red-900/30 text-left">
+        <span className="font-semibold text-sm text-red-400">Database Empty</span>
+        <span className="text-xs text-zinc-400">Your profile doesn't have a workspace yet.</span>
+        <button
+          onClick={async () => {
+            const newId = crypto.randomUUID();
+            const now = new Date().toISOString();
+            // Insert into SQLite, PowerSync will push this to Supabase
+            try {
+              await powersync.execute(
+                `INSERT INTO workspaces (id, name, is_personal, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+                [newId, 'Personal', 1, now, now]
+              );
+              // Note: We need a valid user ID. Assuming Supabase connector gives it
+              const { data } = await supabase.auth.getUser();
+              if (data?.user?.id) {
+                await powersync.execute(
+                  `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+                  [crypto.randomUUID(), newId, data.user.id, 'owner', now, now]
+                );
+              }
+              onSwitch(newId);
+            } catch (err) {
+              console.error(err);
+              alert("Wait a few seconds for PowerSync to download your existing workspace from the cloud.");
+            }
+          }}
+          className="mt-1 w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition"
+        >
+          Create Default Workspace
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
