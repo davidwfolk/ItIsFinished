@@ -37,3 +37,8 @@ This document serves as the permanent, living roadmap for the **It Is Finished**
 - [ ] **TestFlight:** Push the React Native iOS app to TestFlight for initial beta testing.
 - [ ] **App Store Submission:** Prepare screenshots, metadata, and submit to the Apple App Store.
 - [ ] *(Optional)* **Google Play:** Android deployment workflow.
+
+## 🤝 Stage 7: Collaboration & Workspaces
+- [ ] **Architecture (Option 3 - Strict Separation):** Implement "Invisible Workspaces" where users strictly switch contexts between Personal and Work (no unified multi-email view initially). 
+- [ ] **Monetization Limit:** Determine the limit on how many "workspaces" a user can own or join on the Free version.
+- [ ] **Workspace Sharing:** UI for inviting users to a specific workspace via email.
