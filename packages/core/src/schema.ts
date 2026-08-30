@@ -79,6 +79,7 @@ export const tags = new Table({
 });
 
 export const task_tags = new Table({
+  workspace_id: column.text,
   task_id: column.text,
   tag_id: column.text,
   created_at: column.text
@@ -99,6 +100,7 @@ export const habits = new Table({
 });
 
 export const habit_logs = new Table({
+  workspace_id: column.text,
   habit_id: column.text,
   log_date: column.text,
   count: column.integer,
@@ -106,6 +108,7 @@ export const habit_logs = new Table({
 });
 
 export const comments = new Table({
+  workspace_id: column.text,
   task_id: column.text,
   user_id: column.text,
   content: column.text,
@@ -115,6 +118,7 @@ export const comments = new Table({
 });
 
 export const attachments = new Table({
+  workspace_id: column.text,
   task_id: column.text,
   file_name: column.text,
   file_size_bytes: column.integer,

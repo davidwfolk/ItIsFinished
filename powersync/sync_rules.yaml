@@ -4,7 +4,7 @@
 # Defines dynamic data streams replicating from Supabase PostgreSQL to client SQLite.
 
 bucket_definitions:
-  # 1. User Personal Stream
+  # 1. User Personal Stream (Profile, Time Blocks, Focus Sessions)
   user_personal:
     parameters: 
       - SELECT request.user_id() as current_user_id
@@ -13,7 +13,7 @@ bucket_definitions:
       - SELECT * FROM time_blocks WHERE user_id = bucket.current_user_id
       - SELECT * FROM focus_sessions WHERE user_id = bucket.current_user_id
 
-  # 2. Workspaces Stream (Top-level workspace data)
+  # 2. Workspaces Stream (All data belonging to Workspaces the user is a member of)
   workspaces_stream:
     parameters:
       - SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id()
@@ -26,18 +26,7 @@ bucket_definitions:
       - SELECT * FROM tags WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM habits WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM saved_filters WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
-
-  # 3. Tasks Dependent Stream (Comments, Attachments)
-  tasks_stream:
-    parameters:
-      - SELECT tasks.id as task_id FROM tasks INNER JOIN workspace_members ON tasks.workspace_id = workspace_members.workspace_id WHERE workspace_members.user_id = request.user_id()
-    data:
-      - SELECT * FROM comments WHERE task_id = bucket.task_id AND deleted_at IS NULL
-      - SELECT * FROM attachments WHERE task_id = bucket.task_id AND deleted_at IS NULL
-
-  # 4. Habits Dependent Stream (Habit Logs)
-  habits_stream:
-    parameters:
-      - SELECT habits.id as habit_id FROM habits INNER JOIN workspace_members ON habits.workspace_id = workspace_members.workspace_id WHERE workspace_members.user_id = request.user_id()
-    data:
-      - SELECT * FROM habit_logs WHERE habit_id = bucket.habit_id
+      - SELECT * FROM habit_logs WHERE workspace_id = bucket.workspace_id
+      - SELECT * FROM task_tags WHERE workspace_id = bucket.workspace_id
+      - SELECT * FROM comments WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
+      - SELECT * FROM attachments WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
