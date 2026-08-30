@@ -27,18 +27,17 @@ bucket_definitions:
       - SELECT * FROM habits WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM saved_filters WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
 
-  # 3. Tasks Dependent Stream (Comments, Attachments, Task Tags)
+  # 3. Tasks Dependent Stream (Comments, Attachments)
   tasks_stream:
     parameters:
-      - SELECT id as task_id FROM tasks WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+      - SELECT tasks.id as task_id FROM tasks INNER JOIN workspace_members ON tasks.workspace_id = workspace_members.workspace_id WHERE workspace_members.user_id = request.user_id()
     data:
-      - SELECT * FROM task_tags WHERE task_id = bucket.task_id
       - SELECT * FROM comments WHERE task_id = bucket.task_id AND deleted_at IS NULL
       - SELECT * FROM attachments WHERE task_id = bucket.task_id AND deleted_at IS NULL
 
   # 4. Habits Dependent Stream (Habit Logs)
   habits_stream:
     parameters:
-      - SELECT id as habit_id FROM habits WHERE workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id())
+      - SELECT habits.id as habit_id FROM habits INNER JOIN workspace_members ON habits.workspace_id = workspace_members.workspace_id WHERE workspace_members.user_id = request.user_id()
     data:
       - SELECT * FROM habit_logs WHERE habit_id = bucket.habit_id
