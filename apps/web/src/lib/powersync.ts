@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://hyrffgsjmobdffpgoalw.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key';
-const POWERSYNC_URL = import.meta.env.VITE_POWERSYNC_URL || 'https://hyrffgsjmobdffpgoalw.powersync.journeyapps.com';
+const POWERSYNC_URL = import.meta.env.VITE_POWERSYNC_URL || 'https://6a9356a28453e7cf8332b2a9.powersync.journeyapps.com';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
