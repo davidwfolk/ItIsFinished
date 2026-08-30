@@ -137,8 +137,8 @@ export function Workspace() {
   );
 
   // Live Reactive SQLite Tasks Query
-  const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
-    `SELECT t.*, p.name as project_name 
+  const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string; project_color?: string }>(
+    `SELECT t.*, p.name as project_name, p.color as project_color 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
      WHERE t.deleted_at IS NULL 
@@ -158,6 +158,7 @@ export function Workspace() {
       priority: (t.priority || 4) as 1 | 2 | 3 | 4,
       project: t.project_name || 'Inbox',
       project_id: t.project_id,
+      projectColor: t.project_color,
       section_id: t.section_id,
       recurrence_rule: t.recurrence_rule,
       assigned_to: t.assigned_to,
@@ -1125,7 +1126,7 @@ export function Workspace() {
                           </div>
 
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-zinc-500">
-                            <span className="flex items-center gap-1 text-zinc-400">
+                            <span className="flex items-center gap-1" style={{ color: task.projectColor || '#a1a1aa' }}>
                               <Folder className="h-3 w-3" /> {task.project}
                             </span>
                             {task.due_date && (
