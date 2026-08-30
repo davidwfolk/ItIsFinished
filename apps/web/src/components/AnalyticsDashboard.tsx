@@ -11,27 +11,90 @@ export function AnalyticsDashboard() {
     `SELECT * FROM habit_logs`
   );
 
-  const weeklyVelocity = [
-    { day: 'Mon', completed: 8, target: 10 },
-    { day: 'Tue', completed: 12, target: 10 },
-    { day: 'Wed', completed: 9, target: 10 },
-    { day: 'Thu', completed: 14, target: 10 },
-    { day: 'Fri', completed: 11, target: 10 },
-    { day: 'Sat', completed: 4, target: 5 },
-    { day: 'Sun', completed: 3, target: 5 },
-  ];
+  // Fetch actual tasks
+  const { data: allTasks = [] } = useQuery<any>(
+    `SELECT * FROM tasks WHERE deleted_at IS NULL`
+  );
+
+  // Fetch actual focus sessions
+  const { data: allFocusSessions = [] } = useQuery<any>(
+    `SELECT * FROM focus_sessions`
+  );
+
+  const now = new Date();
+  
+  // 1. Calculate Weekly Velocity (Last 7 Days)
+  const weeklyVelocity = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (6 - i));
+    const dayStr = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const dateStr = d.toISOString().split('T')[0];
+    
+    const completed = allTasks.filter((t: any) => t.completed_at && t.completed_at.startsWith(dateStr)).length;
+    
+    return { day: dayStr, completed, target: 10 };
+  });
+
+  // 2. Calculate Priority Breakdown for Active Tasks
+  const activeTasks = allTasks.filter((t: any) => !t.completed_at);
+  const totalActive = activeTasks.length || 1;
 
   const priorityBreakdown = [
-    { label: 'P1 Urgent', count: 18, percentage: 35, color: 'bg-red-500', text: 'text-red-400' },
-    { label: 'P2 High', count: 14, percentage: 28, color: 'bg-orange-500', text: 'text-orange-400' },
-    { label: 'P3 Medium', count: 12, percentage: 24, color: 'bg-blue-500', text: 'text-blue-400' },
-    { label: 'P4 Low', count: 7, percentage: 13, color: 'bg-zinc-500', text: 'text-zinc-400' },
-  ];
+    { label: 'P1 Urgent', level: 1, color: 'bg-red-500', text: 'text-red-400' },
+    { label: 'P2 High', level: 2, color: 'bg-orange-500', text: 'text-orange-400' },
+    { label: 'P3 Medium', level: 3, color: 'bg-blue-500', text: 'text-blue-400' },
+    { label: 'P4 Low', level: 4, color: 'bg-zinc-500', text: 'text-zinc-400' },
+  ].map(p => {
+    const count = activeTasks.filter((t: any) => t.priority === p.level || (!t.priority && p.level === 4)).length;
+    const percentage = Math.round((count / totalActive) * 100);
+    return { ...p, count, percentage: totalActive === 1 && count === 0 ? 0 : percentage };
+  });
 
-  const maxCompleted = Math.max(...weeklyVelocity.map(d => d.completed));
+  const maxCompleted = Math.max(...weeklyVelocity.map(d => d.completed), 1); // Avoid 0
+
+  // 3. KPI Calculations
+  const totalCompleted7Days = weeklyVelocity.reduce((sum, d) => sum + d.completed, 0);
+  
+  const totalCompletedPrev7Days = allTasks.filter((t: any) => {
+    if (!t.completed_at) return false;
+    const diffDays = Math.ceil(Math.abs(now.getTime() - new Date(t.completed_at).getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays > 7 && diffDays <= 14;
+  }).length;
+  
+  const completionTrend = totalCompletedPrev7Days === 0 
+    ? 100 
+    : Math.round(((totalCompleted7Days - totalCompletedPrev7Days) / totalCompletedPrev7Days) * 100);
+
+  const focusTimeTotalMinutes = allFocusSessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0);
+  const focusTimeHours = (focusTimeTotalMinutes / 60).toFixed(1);
+  const focusTimeBlocks = allFocusSessions.length;
+
+  // Habit Consistency (Last 14 Days)
+  const fourteenDaysAgoStr = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const recentLogs = logs.filter((l: any) => l.log_date >= fourteenDaysAgoStr);
+  
+  let totalHabitTargets = 0;
+  let totalHabitCompletions = 0;
+  
+  habits.forEach((h: any) => {
+    totalHabitTargets += (h.target_count || 1) * 14;
+    const habitLogs = recentLogs.filter((l: any) => l.habit_id === h.id);
+    totalHabitCompletions += habitLogs.reduce((sum: number, l: any) => sum + Math.min(l.count, h.target_count || 1), 0);
+  });
+  
+  const habitConsistencyPct = totalHabitTargets === 0 ? 0 : Math.round((totalHabitCompletions / totalHabitTargets) * 100);
+
+  // Task Completion Rate
+  const tasksAdded7Days = allTasks.filter((t: any) => {
+    if (!t.created_at) return false;
+    const diffDays = Math.ceil(Math.abs(now.getTime() - new Date(t.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays <= 7;
+  }).length;
+  
+  const taskCompletionRate = tasksAdded7Days === 0 ? (totalCompleted7Days > 0 ? 100 : 0) : Math.round((totalCompleted7Days / tasksAdded7Days) * 100);
+
 
   // Generate Calendar Grid
-  const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
   const firstDay = new Date(year, month, 1);
@@ -73,7 +136,7 @@ export function AnalyticsDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-semibold flex items-center gap-1.5">
-            <Zap className="h-3.5 w-3.5" /> Velocity: 61 Tasks / Week
+            <Zap className="h-3.5 w-3.5" /> Velocity: {totalCompleted7Days} Tasks / Week
           </span>
         </div>
       </div>
@@ -85,8 +148,10 @@ export function AnalyticsDashboard() {
             <span>Completed (7 Days)</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-400" />
           </div>
-          <p className="text-2xl font-bold font-mono text-zinc-100">61</p>
-          <span className="text-[11px] text-emerald-400 font-medium">↑ 18% vs last week</span>
+          <p className="text-2xl font-bold font-mono text-zinc-100">{totalCompleted7Days}</p>
+          <span className={`text-[11px] font-medium ${completionTrend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {completionTrend >= 0 ? '↑' : '↓'} {Math.abs(completionTrend)}% vs last week
+          </span>
         </div>
 
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
@@ -94,8 +159,8 @@ export function AnalyticsDashboard() {
             <span>Focus Time Logged</span>
             <Clock className="h-4 w-4 text-purple-400" />
           </div>
-          <p className="text-2xl font-bold font-mono text-zinc-100">18.5 <span className="text-sm font-normal text-zinc-400">hrs</span></p>
-          <span className="text-[11px] text-purple-400 font-medium">37 Pomodoro blocks</span>
+          <p className="text-2xl font-bold font-mono text-zinc-100">{focusTimeHours} <span className="text-sm font-normal text-zinc-400">hrs</span></p>
+          <span className="text-[11px] text-purple-400 font-medium">{focusTimeBlocks} Pomodoro blocks</span>
         </div>
 
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
@@ -103,8 +168,8 @@ export function AnalyticsDashboard() {
             <span>Habit Consistency</span>
             <Flame className="h-4 w-4 text-orange-400" />
           </div>
-          <p className="text-2xl font-bold font-mono text-zinc-100">92%</p>
-          <span className="text-[11px] text-orange-400 font-medium">14-day longest streak</span>
+          <p className="text-2xl font-bold font-mono text-zinc-100">{habitConsistencyPct}%</p>
+          <span className="text-[11px] text-orange-400 font-medium">14-day consistency</span>
         </div>
 
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
@@ -112,8 +177,8 @@ export function AnalyticsDashboard() {
             <span>Task Completion Rate</span>
             <CheckCircle2 className="h-4 w-4 text-blue-400" />
           </div>
-          <p className="text-2xl font-bold font-mono text-zinc-100">84%</p>
-          <span className="text-[11px] text-blue-400 font-medium">61 completed / 72 added</span>
+          <p className="text-2xl font-bold font-mono text-zinc-100">{taskCompletionRate}%</p>
+          <span className="text-[11px] text-blue-400 font-medium">{totalCompleted7Days} completed / {tasksAdded7Days} added</span>
         </div>
       </div>
 
