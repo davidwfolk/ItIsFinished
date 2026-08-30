@@ -16,9 +16,17 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { parseQuickAdd, type ParsedTaskInput } from '@app/core';
+import { AuthModal } from './AuthModal';
+import { useAuth } from '../hooks/useAuth';
 
 export function LandingPage() {
+
   const navigate = useNavigate();
+  const [authModalOpen, setAuthModalOpen] = useState(() => {
+    return new URLSearchParams(window.location.search).get('login') === 'true';
+  });
+  const { refreshAuth } = useAuth();
+
   const [demoInput, setDemoInput] = useState('Deploy release to production tomorrow 3pm p1 45m #DevOps');
   const [activeTab, setActiveTab] = useState<'calendar' | 'matrix' | 'habits' | 'nlp'>('calendar');
 
@@ -49,14 +57,14 @@ export function LandingPage() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="text-xs font-medium text-zinc-300 hover:text-white px-3 py-2 rounded-lg hover:bg-zinc-900 transition flex items-center gap-1.5"
             >
               <LogIn className="h-3.5 w-3.5" />
               Sign In
             </button>
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition shadow-lg shadow-blue-600/25 flex items-center gap-1.5 cursor-pointer"
             >
               Launch App
@@ -94,14 +102,14 @@ export function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
             >
               Launch App
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 font-medium text-sm transition"
             >
               Sign In to Cloud
@@ -462,14 +470,14 @@ export function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="w-full sm:w-auto px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
             >
               Launch Finished Now
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => setAuthModalOpen(true)}
               className="w-full sm:w-auto px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium text-sm transition"
             >
               Create Free Account
@@ -498,6 +506,19 @@ export function LandingPage() {
           </div>
         </div>
       </footer>
-    </div>
+    
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => {
+          setAuthModalOpen(false);
+          // clear url param if present
+          window.history.replaceState({}, '', '/');
+        }}
+        onSuccess={async () => {
+          await refreshAuth();
+          navigate('/app');
+        }}
+      />
+  </div>
   );
 }
