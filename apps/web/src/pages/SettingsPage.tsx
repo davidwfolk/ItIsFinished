@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Trash2, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Trash2, ArrowLeft, ShieldCheck, Globe, Layout, Calendar as CalendarIcon } from 'lucide-react';
 import { supabase, powersync } from '../lib/powersync';
 import { useAuth } from '../hooks/useAuth';
 import { MfaSetupModal } from '../components/MfaSetupModal';
+import { useQuery } from '@powersync/react';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -15,6 +16,22 @@ export function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
   const [mfaModalOpen, setMfaModalOpen] = useState(false);
+
+  const { data: profiles = [] } = useQuery(`SELECT * FROM profiles WHERE id = ?`, [user?.id || '']);
+  const profile = profiles[0] || {};
+
+  const handleUpdateProfile = async (field: string, value: string | number) => {
+    if (!user?.id) return;
+    try {
+      const now = new Date().toISOString();
+      await powersync.execute(
+        `UPDATE profiles SET ${field} = ?, updated_at = ? WHERE id = ?`,
+        [value, now, user.id]
+      );
+    } catch (err) {
+      console.error(`Failed to update ${field}:`, err);
+    }
+  };
 
   if (!user) return null;
 
@@ -200,8 +217,85 @@ export function SettingsPage() {
                   <h2 className="text-2xl font-bold text-zinc-100 mb-1">Preferences</h2>
                   <p className="text-sm text-zinc-500">Customize your app experience.</p>
                 </div>
-                <div className="p-8 border border-dashed border-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 text-sm bg-zinc-900/30">
-                  More settings coming soon! (Time zones, themes, default views)
+                
+                <div className="space-y-6">
+                  {/* Time Zone */}
+                  <div className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-blue-400" />
+                        Time Zone
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">Used for syncing due dates correctly.</p>
+                    </div>
+                    <select
+                      value={profile.timezone || 'UTC'}
+                      onChange={(e) => handleUpdateProfile('timezone', e.target.value)}
+                      className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="UTC">UTC (Default)</option>
+                      <option value="America/New_York">Eastern Time (ET)</option>
+                      <option value="America/Chicago">Central Time (CT)</option>
+                      <option value="America/Denver">Mountain Time (MT)</option>
+                      <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                      <option value="Europe/London">London (GMT/BST)</option>
+                      <option value="Asia/Tokyo">Tokyo (JST)</option>
+                    </select>
+                  </div>
+
+                  {/* Default View */}
+                  <div className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                        <Layout className="h-4 w-4 text-purple-400" />
+                        Default Start View
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">Which view to show when you open the app.</p>
+                    </div>
+                    <select
+                      value={profile.default_view || 'today'}
+                      onChange={(e) => handleUpdateProfile('default_view', e.target.value)}
+                      className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="today">Today</option>
+                      <option value="all">Inbox (All)</option>
+                      <option value="matrix">Eisenhower Matrix</option>
+                      <option value="calendar">Time-Blocking Grid</option>
+                    </select>
+                  </div>
+
+                  {/* Start of Week */}
+                  <div className="p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4 text-emerald-400" />
+                        Start of Week
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">Used for weekly calendar grids.</p>
+                    </div>
+                    <div className="flex bg-zinc-950 rounded-lg border border-zinc-700 overflow-hidden">
+                      <button
+                        onClick={() => handleUpdateProfile('start_of_week', 0)}
+                        className={`px-4 py-2 text-sm transition ${
+                          (profile.start_of_week === 0 || profile.start_of_week == null)
+                            ? 'bg-emerald-600 text-white font-medium'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                        }`}
+                      >
+                        Sunday
+                      </button>
+                      <button
+                        onClick={() => handleUpdateProfile('start_of_week', 1)}
+                        className={`px-4 py-2 text-sm transition border-l border-zinc-700 ${
+                          profile.start_of_week === 1
+                            ? 'bg-emerald-600 text-white font-medium border-l-transparent'
+                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                        }`}
+                      >
+                        Monday
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

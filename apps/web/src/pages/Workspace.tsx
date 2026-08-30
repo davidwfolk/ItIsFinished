@@ -5,6 +5,7 @@ import {
   calculateNextRecurrence,
   formatRecurrenceLabel,
   DEFAULT_SMART_FILTERS, 
+  evaluateFilterRule,
   type ParsedTaskInput, 
   type SavedSmartFilter, 
   type TaskRow, 
@@ -110,13 +111,31 @@ export function Workspace() {
   // Modals & Drawers State
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<SavedSmartFilter | null>(null);
 
   const [activeCommentTask, setActiveCommentTask] = useState<ViewTask | null>(null);
-  const [smartFilters, setSmartFilters] = useState<SavedSmartFilter[]>(DEFAULT_SMART_FILTERS);
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
 
   // Live Supabase Auth & Session Hook
   const { user, signOut, refreshAuth } = useAuth();
+
+  // Live Reactive SQLite Saved Filters Query
+  const { data: rawSavedFilters = [] } = useQuery<any>(
+    `SELECT * FROM saved_filters WHERE deleted_at IS NULL ORDER BY order_index ASC`
+  );
+
+  const smartFilters = useMemo(() => {
+    return [
+      ...DEFAULT_SMART_FILTERS,
+      ...rawSavedFilters.map(f => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        icon: f.icon,
+        rule: typeof f.query_rules === 'string' ? JSON.parse(f.query_rules) : f.query_rules
+      }))
+    ];
+  }, [rawSavedFilters]);
 
   // Live Reactive SQLite Projects Query with Task Counts
   const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
@@ -179,6 +198,12 @@ export function Workspace() {
 
   // Filtered Task List based on active selection (Project vs Today vs Filter)
   const displayTasks = useMemo(() => {
+    if (selectedFilterId) {
+      const filter = smartFilters.find(f => f.id === selectedFilterId);
+      if (filter) {
+        return tasks.filter(t => evaluateFilterRule(t, filter.rule));
+      }
+    }
     if (selectedProjectId) {
       return tasks.filter(t => t.project_id === selectedProjectId);
     }
@@ -187,7 +212,7 @@ export function Workspace() {
       return tasks.filter(t => t.due_date && t.due_date <= today);
     }
     return tasks;
-  }, [tasks, selectedProjectId, activeTab]);
+  }, [tasks, selectedProjectId, activeTab, selectedFilterId, smartFilters]);
 
   const activeDisplayTasks = useMemo(() => displayTasks.filter(t => !t.completed), [displayTasks]);
   const completedDisplayTasks = useMemo(() => displayTasks.filter(t => t.completed), [displayTasks]);
@@ -229,6 +254,46 @@ export function Workspace() {
       if (selectedProjectId === id) setSelectedProjectId(null);
     } catch (err) {
       console.error('Failed to delete project in SQLite:', err);
+    }
+  };
+
+  const handleSaveFilter = async (filter: SavedSmartFilter) => {
+    const now = new Date().toISOString();
+    const currentUserId = user?.id || 'demo-user';
+    
+    try {
+      // Check if it exists
+      const existing = await powersync.getOptional(`SELECT id FROM saved_filters WHERE id = ?`, [filter.id]);
+      
+      if (existing) {
+        await powersync.execute(
+          `UPDATE saved_filters SET name = ?, color = ?, icon = ?, query_rules = ?, updated_at = ? WHERE id = ?`,
+          [filter.name, filter.color, filter.icon, JSON.stringify(filter.rule), now, filter.id]
+        );
+      } else {
+        const lastIndex = rawSavedFilters.length > 0 ? rawSavedFilters[rawSavedFilters.length - 1].order_index : null;
+        const newIndex = getOrderIndexBetween(lastIndex, null);
+        
+        await powersync.execute(
+          `INSERT INTO saved_filters (id, user_id, name, color, icon, query_rules, order_index, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [filter.id, currentUserId, filter.name, filter.color, filter.icon, JSON.stringify(filter.rule), newIndex, now, now]
+        );
+      }
+      setSelectedFilterId(filter.id);
+      setSelectedProjectId(null);
+    } catch (err) {
+      console.error('Failed to save smart filter in SQLite:', err);
+    }
+  };
+
+  const handleDeleteFilter = async (id: string) => {
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(`UPDATE saved_filters SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+      if (selectedFilterId === id) setSelectedFilterId(null);
+    } catch (err) {
+      console.error('Failed to delete smart filter in SQLite:', err);
     }
   };
 
@@ -802,27 +867,57 @@ export function Workspace() {
               </button>
             </div>
             <div className="space-y-1 mt-1.5">
-              {smartFilters.map(filter => (
-                <button
-                  key={filter.id}
-                  onClick={() => {
-                    setSelectedFilterId(filter.id);
-                    setSelectedProjectId(null);
-                    setActiveTab('today');
-                  }}
-                  className={`w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
-                    selectedFilterId === filter.id
-                      ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700'
-                      : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    <span style={{ backgroundColor: filter.color }} className="w-2 h-2 rounded-full shrink-0" />
-                    <span className="truncate">{filter.name}</span>
-                  </span>
-                  <Filter className="h-3 w-3 opacity-40 shrink-0" />
-                </button>
-              ))}
+              {smartFilters.map(filter => {
+                const isCustom = !filter.id.startsWith('filter-');
+                return (
+                  <div
+                    key={filter.id}
+                    onClick={() => {
+                      setSelectedFilterId(filter.id);
+                      setSelectedProjectId(null);
+                      setActiveTab('today');
+                    }}
+                    className={`group w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition cursor-pointer ${
+                      selectedFilterId === filter.id
+                        ? 'bg-zinc-800 text-zinc-100 font-semibold border border-zinc-700'
+                        : 'text-zinc-400 hover:bg-zinc-850 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <span style={{ backgroundColor: filter.color }} className="w-2 h-2 rounded-full shrink-0" />
+                      <span className="truncate">{filter.name}</span>
+                    </span>
+                    
+                    {isCustom ? (
+                      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingFilter(filter);
+                            setFilterModalOpen(true);
+                          }}
+                          title="Edit Filter"
+                          className="hover:text-blue-400 p-0.5 transition"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFilter(filter.id);
+                          }}
+                          title="Delete Filter"
+                          className="hover:text-red-400 p-0.5 transition"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <Filter className="h-3 w-3 opacity-40 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </nav>
@@ -1261,12 +1356,12 @@ export function Workspace() {
       {/* Smart Filter Builder Modal */}
       <SmartFilterModal
         isOpen={filterModalOpen}
-        onClose={() => setFilterModalOpen(false)}
-        onSaveFilter={(filter: SavedSmartFilter) => {
-          setSmartFilters([...smartFilters, filter]);
-          setSelectedFilterId(filter.id);
-          setSelectedProjectId(null);
+        onClose={() => {
+          setFilterModalOpen(false);
+          setEditingFilter(null);
         }}
+        initialFilter={editingFilter}
+        onSaveFilter={handleSaveFilter}
       />
 
       {/* Task Comments Drawer */}

@@ -1,23 +1,40 @@
-import { useState } from 'react';
-import { Filter, X, Plus, Check, Code } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Filter, X, Plus, Check, Code, Save } from 'lucide-react';
 import { compileFilterToSql, type FilterRule, type SavedSmartFilter } from '@app/core';
 
 export interface SmartFilterModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveFilter: (filter: SavedSmartFilter) => void;
+  initialFilter?: SavedSmartFilter | null;
 }
 
-export function SmartFilterModal({ isOpen, onClose, onSaveFilter }: SmartFilterModalProps) {
+export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter }: SmartFilterModalProps) {
   const [filterName, setFilterName] = useState('');
   const [selectedPriorities, setSelectedPriorities] = useState<(1 | 2 | 3 | 4)[]>([1]);
   const [dueBefore, setDueBefore] = useState<string>('today');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
 
+  useEffect(() => {
+    if (isOpen) {
+      if (initialFilter) {
+        setFilterName(initialFilter.name);
+        setSelectedColor(initialFilter.color || '#3B82F6');
+        setSelectedPriorities(initialFilter.rule.priority || []);
+        setDueBefore(initialFilter.rule.dueBefore || '');
+      } else {
+        setFilterName('');
+        setSelectedPriorities([1]);
+        setDueBefore('today');
+        setSelectedColor('#3B82F6');
+      }
+    }
+  }, [isOpen, initialFilter]);
+
   if (!isOpen) return null;
 
   const currentRule: FilterRule = {
-    priority: selectedPriorities,
+    priority: selectedPriorities.length > 0 ? selectedPriorities : undefined,
     dueBefore: dueBefore as any,
     includeCompleted: false,
   };
@@ -37,7 +54,7 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter }: SmartFilterM
     if (!filterName.trim()) return;
 
     const newFilter: SavedSmartFilter = {
-      id: `custom-${Date.now()}`,
+      id: initialFilter ? initialFilter.id : `custom-${Date.now()}`,
       name: filterName.trim(),
       color: selectedColor,
       icon: 'filter',
@@ -66,7 +83,7 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter }: SmartFilterM
           <div className="flex items-center gap-2 text-blue-400 font-semibold text-xs uppercase tracking-wider font-mono">
             <Filter className="h-4 w-4" /> Custom Smart Views
           </div>
-          <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Create Smart Filter</h3>
+          <h3 className="text-xl font-bold text-zinc-100 tracking-tight">{initialFilter ? 'Edit Smart Filter' : 'Create Smart Filter'}</h3>
           <p className="text-xs text-zinc-400">
             Build saved custom views with compiled 0ms local SQLite filters.
           </p>
@@ -114,6 +131,7 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter }: SmartFilterM
             <label className="text-xs font-medium text-zinc-300 block mb-1.5">Due Date Constraint</label>
             <div className="grid grid-cols-2 gap-2">
               {[
+                { id: '', label: 'Any Time' },
                 { id: 'today', label: 'Due Today or Overdue' },
                 { id: 'tomorrow', label: 'Due by Tomorrow' },
                 { id: '7days', label: 'Next 7 Days' },
@@ -168,7 +186,7 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter }: SmartFilterM
             disabled={!filterName.trim()}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium py-2.5 rounded-xl text-sm transition shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Plus className="h-4 w-4" /> Save Smart Filter
+            {initialFilter ? <><Save className="h-4 w-4" /> Save Changes</> : <><Plus className="h-4 w-4" /> Save Smart Filter</>}
           </button>
         </form>
       </div>

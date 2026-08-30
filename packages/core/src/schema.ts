@@ -5,6 +5,8 @@ export const profiles = new Table({
   display_name: column.text,
   avatar_url: column.text,
   timezone: column.text,
+  default_view: column.text,
+  start_of_week: column.integer,
   created_at: column.text,
   updated_at: column.text
 });

@@ -100,3 +100,62 @@ export const DEFAULT_SMART_FILTERS: SavedSmartFilter[] = [
     },
   },
 ];
+
+/**
+ * Evaluates a FilterRule against an in-memory task object.
+ * This is used for instantaneous UI updates while maintaining complex rules.
+ */
+export function evaluateFilterRule(task: any, rule: FilterRule): boolean {
+  // 1. Completion status
+  if (!rule.includeCompleted) {
+    if (task.completed || task.status === 'done' || task.status === 'canceled') {
+      return false;
+    }
+  }
+
+  // 2. Priority
+  if (rule.priority && rule.priority.length > 0) {
+    if (!rule.priority.includes(task.priority as any)) {
+      return false;
+    }
+  }
+
+  // 3. Due Date logic
+  if (rule.dueBefore) {
+    if (!task.due_date) return false;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    if (rule.dueBefore === 'today') {
+      if (task.due_date > todayStr) return false;
+    } else if (rule.dueBefore === 'tomorrow') {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      if (task.due_date > tomorrowStr) return false;
+    } else if (rule.dueBefore === '7days') {
+      const nextWeek = new Date();
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const nextWeekStr = nextWeek.toISOString().split('T')[0];
+      if (task.due_date > nextWeekStr) return false;
+    } else if (rule.dueBefore === 'overdue') {
+      if (task.due_date >= todayStr) return false;
+    }
+  }
+
+  // 4. Project ID
+  if (rule.projectId) {
+    if (task.project_id !== rule.projectId) {
+      return false;
+    }
+  }
+
+  // 5. Tags (not implemented in compileFilterToSql yet, but just in case)
+  if (rule.tags && rule.tags.length > 0) {
+    const taskTags = task.tags || [];
+    const hasTag = rule.tags.some(tag => taskTags.includes(tag));
+    if (!hasTag) return false;
+  }
+
+  return true;
+}
