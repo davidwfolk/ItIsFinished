@@ -245,7 +245,7 @@ export function Workspace() {
 
   const handleSaveProject = async (name: string, color: string, icon: string) => {
     const now = new Date().toISOString();
-    const currentUserId = user?.id || 'demo-user';
+
     try {
       if (editingProject) {
         await powersync.execute(
@@ -280,7 +280,7 @@ export function Workspace() {
 
   const handleSaveFilter = async (filter: SavedSmartFilter) => {
     const now = new Date().toISOString();
-    const currentUserId = user?.id || 'demo-user';
+
     
     try {
       // Check if it exists
@@ -310,7 +310,7 @@ export function Workspace() {
 
   const handleDeleteFilter = async (id: string) => {
     const now = new Date().toISOString();
-    const currentUserId = user?.id || 'demo-user';
+
     try {
       const existing = await powersync.getOptional(`SELECT id FROM saved_filters WHERE id = ?`, [id]);
       if (existing) {
@@ -357,7 +357,7 @@ export function Workspace() {
     const newIndex = getOrderIndexBetween(lastIndex, null);
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
-    const currentUserId = user?.id || 'demo-user';
+
 
     const projectName = parsed.projectName || 'Inbox';
     let targetProjectId = 'proj-core-arch';

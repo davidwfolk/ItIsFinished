@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@powersync/react';
 import { ChevronDown, Briefcase, User as UserIcon, Check } from 'lucide-react';
 
@@ -13,7 +13,7 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
 
   // Fetch all workspaces the user has access to
   const { data: workspaces = [] } = useQuery<{ id: string; name: string; is_personal: number }>(
-    \SELECT * FROM workspaces ORDER BY is_personal DESC, name ASC\
+    `SELECT * FROM workspaces ORDER BY is_personal DESC, name ASC`
   );
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
             </span>
           </div>
         </div>
-        <ChevronDown className={\h-4 w-4 text-zinc-500 transition-transform \\} />
+        <ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -72,7 +72,11 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
                 onSwitch(w.id);
                 setIsOpen(false);
               }}
-              className={\w-full flex items-center justify-between px-2 py-2 rounded-lg text-sm transition-colors \\}
+              className={`w-full flex items-center justify-between px-2 py-2 rounded-lg text-sm transition-colors ${
+                activeWorkspaceId === w.id 
+                  ? 'bg-blue-500/10 text-blue-400' 
+                  : 'hover:bg-zinc-800 text-zinc-300'
+              }`}
             >
               <div className="flex items-center gap-2">
                 {w.is_personal === 1 ? (
