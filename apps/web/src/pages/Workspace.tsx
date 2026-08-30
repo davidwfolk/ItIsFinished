@@ -56,6 +56,7 @@ import { FocusTimerView } from '../components/FocusTimerView';
 import { WeeklyReviewModal } from '../components/WeeklyReviewModal';
 import { KanbanBoardView } from '../components/KanbanBoardView';
 import { HabitsTrackerView } from '../components/HabitsTrackerView';
+import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher';
 
 export interface ViewTask {
   id: string;
@@ -91,6 +92,7 @@ import { supabase } from '../lib/powersync';
 export function Workspace() {
   const navigate = useNavigate();
   const powersync = usePowerSync();
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'today' | 'all' | 'calendar' | 'matrix' | 'analytics' | 'focus' | 'habits'>('today');
   const [showCompleted, setShowCompleted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -120,7 +122,7 @@ export function Workspace() {
 
   // Live Reactive SQLite Saved Filters Query (Including deleted ones for tombstones)
   const { data: rawAllSavedFilters = [] } = useQuery<any>(
-    `SELECT * FROM saved_filters ORDER BY order_index ASC`
+    `SELECT * FROM saved_filters WHERE workspace_id = ? ORDER BY order_index ASC`, [activeWorkspaceId]
   );
 
   const smartFilters = useMemo(() => {
@@ -161,14 +163,14 @@ export function Workspace() {
     `SELECT p.*, count(t.id) as task_count 
      FROM projects p 
      LEFT JOIN tasks t ON t.project_id = p.id AND t.completed_at IS NULL AND t.deleted_at IS NULL 
-     WHERE p.deleted_at IS NULL 
+     WHERE p.deleted_at IS NULL AND p.workspace_id = ?
      GROUP BY p.id 
-     ORDER BY p.order_index ASC`
+     ORDER BY p.order_index ASC, p.created_at ASC`, [activeWorkspaceId]
   );
 
   // Live Reactive SQLite Sections Query
   const { data: rawSections = [] } = useQuery<SectionRow>(
-    `SELECT * FROM sections WHERE deleted_at IS NULL ORDER BY order_index ASC`
+    `SELECT * FROM sections WHERE deleted_at IS NULL AND workspace_id = ? ORDER BY order_index ASC`, [activeWorkspaceId]
   );
 
   // Live Reactive SQLite Tasks Query
@@ -176,8 +178,8 @@ export function Workspace() {
     `SELECT t.*, p.name as project_name, p.color as project_color 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
-     WHERE t.deleted_at IS NULL 
-     ORDER BY t.order_index ASC`
+     WHERE t.deleted_at IS NULL AND t.workspace_id = ?
+     ORDER BY t.order_index ASC`, [activeWorkspaceId]
   );
 
   // Map raw database rows to UI Task models
@@ -253,9 +255,9 @@ export function Workspace() {
       } else {
         const newId = `proj-${crypto.randomUUID().slice(0, 8)}`;
         await powersync.execute(
-          `INSERT INTO projects (id, owner_id, name, color, icon, order_index, created_at, updated_at)
+          `INSERT INTO projects (id, workspace_id, name, color, icon, order_index, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [newId, currentUserId, name, color, icon, 'a0', now, now]
+          [newId, activeWorkspaceId, name, color, icon, 'a0', now, now]
         );
         setSelectedProjectId(newId);
         setActiveTab('today');
@@ -294,9 +296,9 @@ export function Workspace() {
         const newIndex = getOrderIndexBetween(lastIndex, null);
         
         await powersync.execute(
-          `INSERT INTO saved_filters (id, user_id, name, color, icon, query_rules, order_index, created_at, updated_at)
+          `INSERT INTO saved_filters (id, workspace_id, name, color, icon, query_rules, order_index, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [filter.id, currentUserId, filter.name, filter.color, filter.icon, JSON.stringify(filter.rule), newIndex, now, now]
+          [filter.id, activeWorkspaceId, filter.name, filter.color, filter.icon, JSON.stringify(filter.rule), newIndex, now, now]
         );
       }
       setSelectedFilterId(filter.id);
@@ -318,9 +320,9 @@ export function Workspace() {
         const lastIndex = rawAllSavedFilters.length > 0 ? rawAllSavedFilters[rawAllSavedFilters.length - 1].order_index : null;
         const newIndex = getOrderIndexBetween(lastIndex, null);
         await powersync.execute(
-          `INSERT INTO saved_filters (id, user_id, name, query_rules, order_index, deleted_at, created_at, updated_at) 
+          `INSERT INTO saved_filters (id, workspace_id, name, query_rules, order_index, deleted_at, created_at, updated_at) 
            VALUES (?, ?, ?, '{}', ?, ?, ?, ?)`, 
-          [id, currentUserId, 'default-tombstone', newIndex, now, now, now]
+          [id, activeWorkspaceId, 'default-tombstone', newIndex, now, now, now]
         );
       }
       if (selectedFilterId === id) setSelectedFilterId(null);
@@ -372,17 +374,18 @@ export function Workspace() {
       } else {
         targetProjectId = `proj-${crypto.randomUUID().slice(0, 8)}`;
         await powersync.execute(
-          `INSERT INTO projects (id, owner_id, name, color, order_index, created_at, updated_at)
+          `INSERT INTO projects (id, workspace_id, name, color, order_index, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [targetProjectId, currentUserId, projectName, '#3B82F6', 'a0', now, now]
+          [targetProjectId, activeWorkspaceId, projectName, '#3B82F6', 'a0', now, now]
         );
       }
 
       await powersync.execute(
-        `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newId,
+          activeWorkspaceId,
           targetProjectId,
           parsed.title,
           parsed.priority || 4,
@@ -421,10 +424,11 @@ export function Workspace() {
         const nextId = `rec-${crypto.randomUUID().slice(0, 8)}`;
 
         await powersync.execute(
-          `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             nextId,
+            activeWorkspaceId,
             task.project_id || 'proj-core-arch',
             task.title,
             task.priority,
@@ -461,9 +465,9 @@ export function Workspace() {
 
     try {
       await powersync.execute(
-        `INSERT INTO tasks (id, project_id, section_id, title, priority, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newId, selectedProjectId || 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now]
+        `INSERT INTO tasks (id, workspace_id, project_id, section_id, title, priority, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newId, activeWorkspaceId, selectedProjectId || 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now]
       );
     } catch (err) {
       console.error('Failed to insert section task in SQLite:', err);
@@ -478,9 +482,9 @@ export function Workspace() {
 
     try {
       await powersync.execute(
-        `INSERT INTO sections (id, project_id, name, order_index, is_collapsed, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [newId, selectedProjectId || 'proj-core-arch', name, newIndex, 0, now, now]
+        `INSERT INTO sections (id, workspace_id, project_id, name, order_index, is_collapsed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newId, activeWorkspaceId, selectedProjectId || 'proj-core-arch', name, newIndex, 0, now, now]
       );
     } catch (err) {
       console.error('Failed to create section in SQLite:', err);
@@ -565,10 +569,11 @@ export function Workspace() {
 
     try {
       await powersync.execute(
-        `INSERT INTO tasks (id, project_id, title, priority, due_date, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           crypto.randomUUID(),
+          activeWorkspaceId,
           'proj-core-arch',
           title,
           priority,
@@ -647,25 +652,34 @@ export function Workspace() {
       {/* Left Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-zinc-800/80 bg-zinc-950 md:bg-zinc-900/40 flex flex-col p-4 transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
 
-        {/* Workspace Brand */}
-        <div className="flex items-center justify-between px-2 py-3 mb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/20">
-              F
+        {/* Workspace Switcher */}
+        <div className="flex flex-col gap-3 px-2 py-3 mb-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/20">
+                F
+              </div>
+              <div>
+                <h1 className="font-semibold text-sm tracking-tight text-zinc-100">It Is Finished</h1>
+              </div>
             </div>
-            <div>
-              <h1 className="font-semibold text-sm tracking-tight text-zinc-100">It Is Finished</h1>
-            </div>
-          </div>
 
-          {!user && (
-            <button
-              onClick={() => setAuthModalOpen(true)}
-              title="Sign In / Register"
-              className="p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-            </button>
+            {!user && (
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                title="Sign In / Register"
+                className="p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition shadow-sm"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          
+          {user && (
+            <WorkspaceSwitcher 
+              activeWorkspaceId={activeWorkspaceId} 
+              onSwitch={setActiveWorkspaceId} 
+            />
           )}
         </div>
 
