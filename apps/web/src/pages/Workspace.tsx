@@ -28,7 +28,6 @@ import {
   MessageSquare,
   LogIn,
   TrendingUp,
-  Filter,
   ListTree,
   Grid,
   Edit2,
