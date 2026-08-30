@@ -41,7 +41,8 @@ import {
   Repeat,
   LogOut,
   Key,
-  Menu
+  Menu,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { CalendarTimeGrid } from '../components/CalendarTimeGrid';

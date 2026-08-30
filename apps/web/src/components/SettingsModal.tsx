@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, AlertTriangle, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/powersync';
 import { useAuth } from '../hooks/useAuth';
