@@ -9,7 +9,7 @@ import {
   ChevronRight, 
   GripVertical, 
   Plus, 
-  Trash2, 
+
   Inbox 
 } from 'lucide-react';
 
@@ -384,18 +384,7 @@ export function CalendarTimeGrid({ onTaskClick, members }: CalendarTimeGridProps
     onTaskClick?.(taskId);
   };
 
-  const handleUnscheduleTask = async (taskId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const now = new Date().toISOString();
-    try {
-      await powersync.execute(
-        `UPDATE tasks SET due_time = NULL, updated_at = ? WHERE id = ?`,
-        [now, taskId]
-      );
-    } catch (err) {
-      console.error('Failed to unschedule task in SQLite:', err);
-    }
-  };
+
 
   const handleCreateOnSlot = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -84,7 +84,7 @@ export function SubtaskTree({ taskId }: SubtaskTreeProps) {
       const parentTask = await powersync.get(
         'SELECT workspace_id, project_id, section_id, created_by FROM tasks WHERE id = ?',
         [taskId]
-      );
+      ) as { workspace_id: string; project_id: string | null; section_id: string | null; created_by: string };
 
       await powersync.execute(
         `INSERT INTO tasks (id, parent_id, workspace_id, project_id, section_id, created_by, title, priority, order_index, status, created_at, updated_at)
