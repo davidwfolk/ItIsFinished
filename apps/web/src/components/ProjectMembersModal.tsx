@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Users, Mail, Shield, UserPlus, X, Check, Trash2, Copy, Link } from 'lucide-react';
 
 export interface ProjectMember {
@@ -20,11 +20,7 @@ export function ProjectMembersModal({ isOpen, onClose, projectName }: ProjectMem
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor');
   const [copiedLink, setCopiedLink] = useState(false);
-  const [members, setMembers] = useState<ProjectMember[]>([
-    { id: 'user-1', email: 'alex@workspace.com', displayName: 'Alex (You)', role: 'owner', color: '#3B82F6', isOnline: true },
-    { id: 'user-2', email: 'sarah.k@company.com', displayName: 'Sarah K.', role: 'editor', color: '#10B981', isOnline: true },
-    { id: 'user-3', email: 'david.w@company.com', displayName: 'David W.', role: 'editor', color: '#F59E0B', isOnline: false },
-  ]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -35,7 +31,7 @@ export function ProjectMembersModal({ isOpen, onClose, projectName }: ProjectMem
 
     const colors = ['#EC4899', '#8B5CF6', '#06B6D4', '#10B981', '#F59E0B'];
     const newMember: ProjectMember = {
-      id: `user-${Date.now()}`,
+      id: crypto.randomUUID(),
       email: inviteEmail.trim(),
       displayName: inviteEmail.split('@')[0],
       role: inviteRole,

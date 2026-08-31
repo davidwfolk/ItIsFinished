@@ -21,6 +21,7 @@ export interface CalendarTask {
   durationMinutes: number; // 15, 30, 45, 60, 90, 120
   priority: 1 | 2 | 3 | 4;
   project: string;
+  projectColor?: string;
   assignedTo?: { id: string; name: string; color: string } | null;
 }
 
@@ -29,12 +30,14 @@ export interface InboxTask {
   title: string;
   priority: 1 | 2 | 3 | 4;
   project: string;
+  projectColor?: string;
   durationMinutes: number;
   assignedTo?: { id: string; name: string; color: string } | null;
 }
 
 export interface CalendarTimeGridProps {
   onTaskClick?: (taskId: string) => void;
+  members: { id: string; name: string; color: string; role?: string }[];
 }
 
 const HOURS = [
@@ -44,13 +47,6 @@ const HOURS = [
 ];
 
 const QUARTERS = ['00', '15', '30', '45'];
-
-const TEAM_MEMBERS = [
-  { id: 'all', name: 'Everyone', color: '#6366F1' },
-  { id: 'user-1', name: 'Alex (You)', color: '#3B82F6' },
-  { id: 'user-2', name: 'Sarah K.', color: '#10B981' },
-  { id: 'user-3', name: 'David W.', color: '#F59E0B' },
-];
 
 function formatHourLabel(hourStr: string): string {
   const h = parseInt(hourStr, 10);
@@ -76,15 +72,20 @@ function formatDurationLabel(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
+export function CalendarTimeGrid({ onTaskClick, members }: CalendarTimeGridProps) {
   const powersync = usePowerSync();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'workweek' | 'fullweek'>('fullweek');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
 
+  const displayMembers = [
+    { id: 'all', name: 'Everyone', color: '#6366F1' },
+    ...members
+  ];
+
   // Live Query from PowerSync SQLite
-  const { data: dbTasks = [] } = useQuery<TaskRow & { project_name?: string }>(
-    `SELECT t.*, p.name as project_name 
+  const { data: dbTasks = [] } = useQuery<TaskRow & { project_name?: string, project_color?: string }>(
+    `SELECT t.*, p.name as project_name, p.color as project_color 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
      WHERE t.deleted_at IS NULL AND t.parent_id IS NULL
@@ -139,12 +140,13 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
         return true;
       })
       .map((t) => {
-        const member = TEAM_MEMBERS.find((m) => m.id === t.assigned_to);
+        const member = displayMembers.find((m) => m.id === t.assigned_to);
         return {
           id: t.id,
           title: t.title,
           priority: (t.priority || 4) as 1 | 2 | 3 | 4,
           project: t.project_name || 'Inbox',
+          projectColor: t.project_color,
           durationMinutes: t.estimated_minutes || 30,
           assignedTo: member ? { id: member.id, name: member.name, color: member.color } : null,
         };
@@ -159,7 +161,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
         return true;
       })
       .map((t) => {
-        const member = TEAM_MEMBERS.find((m) => m.id === t.assigned_to);
+        const member = displayMembers.find((m) => m.id === t.assigned_to);
         return {
           id: t.id,
           title: t.title,
@@ -168,6 +170,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
           durationMinutes: t.estimated_minutes || 45,
           priority: (t.priority || 4) as 1 | 2 | 3 | 4,
           project: t.project_name || 'General',
+          projectColor: t.project_color,
           assignedTo: member ? { id: member.id, name: member.name, color: member.color } : null,
         };
       });
@@ -181,10 +184,17 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
   const [inboxDropActive, setInboxDropActive] = useState(false);
 
   const priorityColors = {
-    1: 'bg-red-500/20 border-red-500/50 text-red-300',
-    2: 'bg-orange-500/20 border-orange-500/50 text-orange-300',
-    3: 'bg-blue-500/20 border-blue-500/50 text-blue-300',
-    4: 'bg-zinc-800/80 border-zinc-700 text-zinc-300',
+    1: 'border-red-500/30 bg-red-500/10 text-red-100',
+    2: 'border-orange-500/30 bg-orange-500/10 text-orange-100',
+    3: 'border-blue-500/30 bg-blue-500/10 text-blue-100',
+    4: 'border-zinc-700/50 bg-zinc-800/30 text-zinc-100',
+  };
+
+  const priorityTextColors = {
+    1: 'text-red-400',
+    2: 'text-orange-400',
+    3: 'text-blue-400',
+    4: 'text-zinc-400',
   };
 
   // Week Navigation Handlers
@@ -467,19 +477,19 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
                 </span>
               </div>
               <div className="flex items-center gap-2 text-zinc-500 text-[11px] pl-5">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" style={{ color: t.projectColor || '#a1a1aa' }}>
                   <Folder className="h-3 w-3" /> {t.project}
                 </span>
                 {t.assignedTo && (
                   <span
                     style={{ backgroundColor: t.assignedTo.color }}
-                    className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 ml-auto shadow-sm"
+                    className="w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shrink-0 shadow-sm"
                     title={t.assignedTo.name}
                   >
                     {t.assignedTo.name.slice(0, 2).toUpperCase()}
                   </span>
                 )}
-                <span className="ml-auto font-mono text-[10px] text-zinc-400 font-semibold">P{t.priority}</span>
+                <span className={`ml-auto font-mono text-[10px] font-semibold ${priorityTextColors[t.priority]}`}>P{t.priority}</span>
               </div>
             </div>
           ))}
@@ -532,7 +542,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
           <div className="flex items-center gap-3">
             {/* Team Member Filter Bar */}
             <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800">
-              {TEAM_MEMBERS.map((member) => (
+              {displayMembers.map((member) => (
                 <button
                   key={member.id}
                   onClick={() => setSelectedMemberId(member.id)}
@@ -667,14 +677,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
                           title="Drag top edge to adjust start time (15m increments)"
                         />
 
-                        {/* Unschedule Hover Button (Uniform Top-Right across ALL cards) */}
-                        <button
-                          onClick={(e) => handleUnscheduleTask(task.id, e)}
-                          title="Unschedule back to Inbox"
-                          className="absolute top-0.5 right-1 opacity-0 group-hover:opacity-100 hover:text-red-400 p-0.5 bg-zinc-900/90 rounded border border-white/10 transition z-10"
-                        >
-                          <Trash2 className="h-2.5 w-2.5" />
-                        </button>
+
 
                         {isCompact ? (
                           /* Slim 1-line for 15m and 30m tasks */
@@ -688,6 +691,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
                                   title={task.assignedTo.name}
                                 />
                               )}
+
                               <span className="font-semibold truncate text-[11px] leading-none">
                                 {task.title}
                               </span>
@@ -720,9 +724,12 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
 
                             {/* Line 2: Project (left) & Duration (right) */}
                             <div className="flex items-center justify-between text-[10px] font-mono gap-1 mt-1 min-w-0">
-                              <span className="text-[11px] font-medium text-zinc-400 truncate">
-                                #{task.project}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-[11px] font-medium truncate" style={{ color: task.projectColor || '#a1a1aa' }}>
+                                  #{task.project}
+                                </span>
+
+                              </div>
                               <div className="flex items-center text-zinc-300 font-semibold shrink-0 ml-2">
                                 <Clock className="h-3 w-3 mr-1 text-zinc-400 shrink-0" />
                                 <span>{formatDurationLabel(task.durationMinutes)}</span>
@@ -746,8 +753,11 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
                                   {task.title}
                                 </span>
                               </div>
-                              <div className="text-[11px] font-medium text-zinc-400 truncate mt-1">
-                                #{task.project}
+                              <div className="flex items-center gap-1.5 min-w-0 mt-1 font-mono text-[11px]">
+                                <span className="font-medium truncate" style={{ color: task.projectColor || '#a1a1aa' }}>
+                                  #{task.project}
+                                </span>
+
                               </div>
                             </div>
 

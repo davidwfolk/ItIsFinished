@@ -20,7 +20,9 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter 
       if (initialFilter) {
         setFilterName(initialFilter.name);
         setSelectedColor(initialFilter.color || '#3B82F6');
-        setSelectedPriorities(initialFilter.rule.priority || []);
+        const loadedPriorities = initialFilter.rule.priority || [];
+        const numericPriorities = loadedPriorities.map(x => Number(x)) as (1 | 2 | 3 | 4)[];
+        setSelectedPriorities(numericPriorities);
         setDueBefore(initialFilter.rule.dueBefore || '');
       } else {
         setFilterName('');
@@ -40,11 +42,13 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter 
   };
 
   const togglePriority = (p: 1 | 2 | 3 | 4) => {
-    if (selectedPriorities.includes(p)) {
-      setSelectedPriorities(selectedPriorities.filter(x => x !== p));
-    } else {
-      setSelectedPriorities([...selectedPriorities, p]);
-    }
+    setSelectedPriorities(prev => {
+      if (prev.includes(p)) {
+        return prev.filter(x => x !== p);
+      } else {
+        return [...prev, p];
+      }
+    });
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -52,7 +56,7 @@ export function SmartFilterModal({ isOpen, onClose, onSaveFilter, initialFilter 
     if (!filterName.trim()) return;
 
     const newFilter: SavedSmartFilter = {
-      id: initialFilter ? initialFilter.id : `custom-${Date.now()}`,
+      id: initialFilter ? initialFilter.id : crypto.randomUUID(),
       name: filterName.trim(),
       color: selectedColor,
       icon: 'filter',

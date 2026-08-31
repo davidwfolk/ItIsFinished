@@ -81,11 +81,6 @@ export interface ViewTask {
   hasSubtasks?: boolean;
 }
 
-const TEAM_MEMBERS = [
-  { id: 'user-1', name: 'Alex (You)', color: '#3B82F6', role: 'Owner' },
-  { id: 'user-2', name: 'Sarah K.', color: '#10B981', role: 'Editor' },
-  { id: 'user-3', name: 'David W.', color: '#F59E0B', role: 'Editor' },
-];
 
 import { supabase } from '../lib/powersync';
 
@@ -133,12 +128,20 @@ export function Workspace() {
       if (dbMap.has(df.id)) {
         const dbRow = dbMap.get(df.id);
         if (dbRow.deleted_at) return null; // Tombstoned by user
+        let parsedRule = dbRow.query_rules;
+        try {
+          while (typeof parsedRule === 'string') {
+            parsedRule = JSON.parse(parsedRule);
+          }
+        } catch (e) {
+          console.error("Failed to parse default rule:", dbRow.query_rules);
+        }
         return {
           id: dbRow.id,
           name: dbRow.name,
           color: dbRow.color,
           icon: dbRow.icon,
-          rule: typeof dbRow.query_rules === 'string' ? JSON.parse(dbRow.query_rules) : dbRow.query_rules
+          rule: parsedRule
         };
       }
       return df;
@@ -147,13 +150,23 @@ export function Workspace() {
     // 2. Add purely custom filters (not in defaults, not deleted)
     const customDbFilters = rawAllSavedFilters
       .filter(f => !f.deleted_at && !DEFAULT_SMART_FILTERS.some(df => df.id === f.id))
-      .map(f => ({
-        id: f.id,
-        name: f.name,
-        color: f.color,
-        icon: f.icon,
-        rule: typeof f.query_rules === 'string' ? JSON.parse(f.query_rules) : f.query_rules
-      }));
+      .map(f => {
+        let parsedRule = f.query_rules;
+        try {
+          while (typeof parsedRule === 'string') {
+            parsedRule = JSON.parse(parsedRule);
+          }
+        } catch (e) {
+          console.error("Failed to parse rule:", f.query_rules);
+        }
+        return {
+          id: f.id,
+          name: f.name,
+          color: f.color,
+          icon: f.icon,
+          rule: parsedRule
+        };
+      });
 
     return [...processedDefaults, ...customDbFilters];
   }, [rawAllSavedFilters]);
@@ -172,6 +185,22 @@ export function Workspace() {
   const { data: rawSections = [] } = useQuery<SectionRow>(
     `SELECT * FROM sections WHERE deleted_at IS NULL AND workspace_id = ? ORDER BY order_index ASC`, [activeWorkspaceId]
   );
+
+  // Live Reactive SQLite Workspace Members Query
+  const { data: rawMembers = [] } = useQuery<{ id: string; name: string; role: string }>(
+    `SELECT p.id, p.display_name as name, wm.role 
+     FROM workspace_members wm 
+     JOIN profiles p ON p.id = wm.user_id 
+     WHERE wm.workspace_id = ?`,
+    [activeWorkspaceId]
+  );
+
+  const workspaceMembers = useMemo(() => {
+    return rawMembers.map((m, i) => ({
+      ...m,
+      color: ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][i % 5] // Assign random deterministic colors
+    }));
+  }, [rawMembers]);
 
   // Live Reactive SQLite Tasks Query
   const { data: rawTasks = [] } = useQuery<TaskRow & { project_name?: string; project_color?: string }>(
@@ -199,13 +228,13 @@ export function Workspace() {
       section_id: t.section_id,
       recurrence_rule: t.recurrence_rule,
       assigned_to: t.assigned_to,
-      assignedTo: TEAM_MEMBERS.find(m => m.id === t.assigned_to) || null,
+      assignedTo: workspaceMembers.find(m => m.id === t.assigned_to) || null,
       tags: [],
       completed: !!t.completed_at || t.status === 'done',
       completed_at: t.completed_at || null,
       hasSubtasks: false,
     }));
-  }, [rawTasks]);
+  }, [rawTasks, workspaceMembers]);
 
   // Selected Task for TaskDetailDrawer
   const selectedTask = useMemo(() => {
@@ -979,7 +1008,7 @@ export function Workspace() {
           <div className="w-9" /> {/* spacer for center alignment */}
         </div>
                 {activeTab === 'calendar' ? (
-          <CalendarTimeGrid onTaskClick={(id: string) => setSelectedTaskId(id)} />
+          <CalendarTimeGrid onTaskClick={(id: string) => setSelectedTaskId(id)} members={workspaceMembers} />
         ) : activeTab === 'matrix' ? (
           <EisenhowerMatrixView
             tasks={tasks.map(t => ({
@@ -1362,7 +1391,7 @@ export function Workspace() {
         taskId={selectedTaskId}
         task={selectedTask}
         projects={rawProjects}
-        members={TEAM_MEMBERS}
+        members={workspaceMembers}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={deleteTask}
         onStartFocus={(taskId: string) => {

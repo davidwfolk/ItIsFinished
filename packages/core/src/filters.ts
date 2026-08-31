@@ -70,7 +70,7 @@ export function compileFilterToSql(rule: FilterRule): { sql: string; params: any
  */
 export const DEFAULT_SMART_FILTERS: SavedSmartFilter[] = [
   {
-    id: 'filter-urgent',
+    id: '11111111-1111-1111-1111-111111111111',
     name: 'High Priority (P1 & P2)',
     color: '#EF4444',
     icon: 'flame',
@@ -80,7 +80,7 @@ export const DEFAULT_SMART_FILTERS: SavedSmartFilter[] = [
     },
   },
   {
-    id: 'filter-overdue',
+    id: '22222222-2222-2222-2222-222222222222',
     name: 'Overdue Tasks',
     color: '#F97316',
     icon: 'alert-circle',
@@ -90,7 +90,7 @@ export const DEFAULT_SMART_FILTERS: SavedSmartFilter[] = [
     },
   },
   {
-    id: 'filter-week',
+    id: '33333333-3333-3333-3333-333333333333',
     name: 'Next 7 Days Agenda',
     color: '#3B82F6',
     icon: 'calendar',
@@ -114,8 +114,9 @@ export function evaluateFilterRule(task: any, rule: FilterRule): boolean {
   }
 
   // 2. Priority
-  if (rule.priority && rule.priority.length > 0) {
-    if (!rule.priority.includes(task.priority as any)) {
+  if (rule.priority && Array.isArray(rule.priority) && rule.priority.length > 0) {
+    const stringPriorities = rule.priority.map(p => String(p));
+    if (!stringPriorities.includes(String(task.priority))) {
       return false;
     }
   }
