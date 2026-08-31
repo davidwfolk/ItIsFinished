@@ -56,13 +56,21 @@ export class SupabasePowerSyncConnector implements PowerSyncBackendConnector {
         const data = op.opData ? { ...op.opData } : {};
 
         switch (op.op) {
-          case UpdateType.PUT:
-          case UpdateType.PATCH: {
+          case UpdateType.PUT: {
             data.id = op.id;
             const { error } = await this.supabase
               .from(table)
               .upsert(data);
             if (error) throw new Error(`Supabase Upsert Failed on ${table}: ${error.message}`);
+            break;
+          }
+
+          case UpdateType.PATCH: {
+            const { error } = await this.supabase
+              .from(table)
+              .update(data)
+              .eq('id', op.id);
+            if (error) throw new Error(`Supabase Update Failed on ${table}: ${error.message}`);
             break;
           }
 

@@ -22,8 +22,8 @@ content = content.replace(
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\\
 );
 content = content.replace(
-  /nextId,\n\s*task\.project_id \|\| 'proj-core-arch',/,
-  "nextId,\n            activeWorkspaceId,\n            task.project_id || 'proj-core-arch',"
+  /nextId,\n\s*task\.project_id \|\| '00000000-0000-0000-0000-000000000000',/,
+  "nextId,\n            activeWorkspaceId,\n            task.project_id || '00000000-0000-0000-0000-000000000000',"
 );
 
 // 3. handleAddSectionTask
@@ -33,8 +33,8 @@ content = content.replace(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\\
 );
 content = content.replace(
-  /\[newId, selectedProjectId \|\| 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now\]/,
-  "[newId, activeWorkspaceId, selectedProjectId || 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now]"
+  /\[newId, selectedProjectId \|\| '00000000-0000-0000-0000-000000000000', sectionId, title, 4, newIndex, 'todo', now, now\]/,
+  "[newId, activeWorkspaceId, selectedProjectId || '00000000-0000-0000-0000-000000000000', sectionId, title, 4, newIndex, 'todo', now, now]"
 );
 
 // 4. addTaskToQuadrant
@@ -44,8 +44,8 @@ content = content.replace(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\\
 );
 content = content.replace(
-  /crypto\.randomUUID\(\),\n\s*'proj-core-arch',/,
-  "crypto.randomUUID(),\n          activeWorkspaceId,\n          'proj-core-arch',"
+  /crypto\.randomUUID\(\),\n\s*'00000000-0000-0000-0000-000000000000',/,
+  "crypto.randomUUID(),\n          activeWorkspaceId,\n          '00000000-0000-0000-0000-000000000000',"
 );
 
 // We must also update handleCreateProject and handleCreateSection if they exist in Workspace.tsx

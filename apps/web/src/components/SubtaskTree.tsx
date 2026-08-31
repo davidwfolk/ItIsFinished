@@ -81,10 +81,28 @@ export function SubtaskTree({ taskId }: SubtaskTreeProps) {
     const newId = crypto.randomUUID();
 
     try {
+      const parentTask = await powersync.get(
+        'SELECT workspace_id, project_id, section_id, created_by FROM tasks WHERE id = ?',
+        [taskId]
+      );
+
       await powersync.execute(
-        `INSERT INTO tasks (id, parent_id, title, priority, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newId, taskId, newSubtaskTitle.trim(), 4, newIndex, 'todo', now, now]
+        `INSERT INTO tasks (id, parent_id, workspace_id, project_id, section_id, created_by, title, priority, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newId,
+          taskId,
+          parentTask.workspace_id,
+          parentTask.project_id,
+          parentTask.section_id,
+          parentTask.created_by,
+          newSubtaskTitle.trim(),
+          4,
+          newIndex,
+          'todo',
+          now,
+          now
+        ]
       );
       setNewSubtaskTitle('');
     } catch (err) {

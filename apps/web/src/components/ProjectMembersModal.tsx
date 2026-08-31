@@ -58,7 +58,7 @@ export function ProjectMembersModal({ isOpen, onClose, projectName }: ProjectMem
   };
 
   const handleCopyInviteLink = () => {
-    navigator.clipboard.writeText(`https://itisfinished.app/join/proj-${projectName.toLowerCase().replace(/\s+/g, '-')}`);
+    navigator.clipboard.writeText(`https://itisfinished.app/join/p-${projectName.toLowerCase().replace(/\s+/g, '-')}`);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
@@ -97,7 +97,7 @@ export function ProjectMembersModal({ isOpen, onClose, projectName }: ProjectMem
           <div className="flex items-center gap-2 text-xs text-zinc-300 truncate min-w-0">
             <Link className="h-3.5 w-3.5 text-blue-400 shrink-0" />
             <span className="truncate font-mono text-[11px] text-zinc-400">
-              https://itisfinished.app/join/proj-{projectName.toLowerCase().replace(/\s+/g, '-')}
+              https://itisfinished.app/join/p-{projectName.toLowerCase().replace(/\s+/g, '-')}
             </span>
           </div>
 

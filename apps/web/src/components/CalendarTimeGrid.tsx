@@ -402,7 +402,7 @@ export function CalendarTimeGrid({ onTaskClick }: CalendarTimeGridProps) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newId,
-          'proj-core-arch',
+          '00000000-0000-0000-0000-000000000000',
           newSlotTaskTitle.trim(),
           2,
           selectedSlot.dateStr,

@@ -162,7 +162,7 @@ export function Workspace() {
   const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
     `SELECT p.*, count(t.id) as task_count 
      FROM projects p 
-     LEFT JOIN tasks t ON t.project_id = p.id AND t.completed_at IS NULL AND t.deleted_at IS NULL 
+     LEFT JOIN tasks t ON t.project_id = p.id AND t.completed_at IS NULL AND t.deleted_at IS NULL AND t.parent_id IS NULL
      WHERE p.deleted_at IS NULL AND p.workspace_id = ?
      GROUP BY p.id 
      ORDER BY p.order_index ASC, p.created_at ASC`, [activeWorkspaceId]
@@ -178,7 +178,7 @@ export function Workspace() {
     `SELECT t.*, p.name as project_name, p.color as project_color 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
-     WHERE t.deleted_at IS NULL AND t.workspace_id = ?
+     WHERE t.deleted_at IS NULL AND t.workspace_id = ? AND t.parent_id IS NULL
      ORDER BY t.order_index ASC`, [activeWorkspaceId]
   );
 
@@ -253,7 +253,7 @@ export function Workspace() {
           [name, color, icon, now, editingProject.id]
         );
       } else {
-        const newId = `proj-${crypto.randomUUID().slice(0, 8)}`;
+        const newId = crypto.randomUUID();
         await powersync.execute(
           `INSERT INTO projects (id, workspace_id, name, color, icon, order_index, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -360,7 +360,7 @@ export function Workspace() {
 
 
     const projectName = parsed.projectName || 'Inbox';
-    let targetProjectId = 'proj-core-arch';
+    let targetProjectId = '00000000-0000-0000-0000-000000000000';
 
     try {
       // Find or auto-create project
@@ -372,7 +372,7 @@ export function Workspace() {
       if (existing?.id) {
         targetProjectId = existing.id;
       } else {
-        targetProjectId = `proj-${crypto.randomUUID().slice(0, 8)}`;
+        targetProjectId = crypto.randomUUID();
         await powersync.execute(
           `INSERT INTO projects (id, workspace_id, name, color, order_index, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -421,7 +421,7 @@ export function Workspace() {
         const next = calculateNextRecurrence(task.due_date, task.due_time, task.recurrence_rule);
         const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
         const newIndex = getOrderIndexBetween(lastIndex, null);
-        const nextId = `rec-${crypto.randomUUID().slice(0, 8)}`;
+        const nextId = crypto.randomUUID();
 
         await powersync.execute(
           `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
@@ -429,7 +429,7 @@ export function Workspace() {
           [
             nextId,
             activeWorkspaceId,
-            task.project_id || 'proj-core-arch',
+            task.project_id || '00000000-0000-0000-0000-000000000000',
             task.title,
             task.priority,
             next.nextDueDate,
@@ -461,13 +461,13 @@ export function Workspace() {
     const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
     const now = new Date().toISOString();
-    const newId = `task-${crypto.randomUUID().slice(0, 8)}`;
+    const newId = crypto.randomUUID();
 
     try {
       await powersync.execute(
         `INSERT INTO tasks (id, workspace_id, project_id, section_id, title, priority, order_index, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newId, activeWorkspaceId, selectedProjectId || 'proj-core-arch', sectionId, title, 4, newIndex, 'todo', now, now]
+        [newId, activeWorkspaceId, selectedProjectId || '00000000-0000-0000-0000-000000000000', sectionId, title, 4, newIndex, 'todo', now, now]
       );
     } catch (err) {
       console.error('Failed to insert section task in SQLite:', err);
@@ -478,13 +478,13 @@ export function Workspace() {
     const lastIndex = rawSections.length > 0 ? rawSections[rawSections.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
     const now = new Date().toISOString();
-    const newId = `sec-${crypto.randomUUID().slice(0, 8)}`;
+    const newId = crypto.randomUUID();
 
     try {
       await powersync.execute(
         `INSERT INTO sections (id, workspace_id, project_id, name, order_index, is_collapsed, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newId, activeWorkspaceId, selectedProjectId || 'proj-core-arch', name, newIndex, 0, now, now]
+        [newId, activeWorkspaceId, selectedProjectId || '00000000-0000-0000-0000-000000000000', name, newIndex, 0, now, now]
       );
     } catch (err) {
       console.error('Failed to create section in SQLite:', err);
@@ -574,7 +574,7 @@ export function Workspace() {
         [
           crypto.randomUUID(),
           activeWorkspaceId,
-          'proj-core-arch',
+          '00000000-0000-0000-0000-000000000000',
           title,
           priority,
           now.slice(0, 10),

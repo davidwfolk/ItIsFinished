@@ -57,7 +57,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<1 | 2 | 3 | 4>(4);
-  const [projectId, setProjectId] = useState<string>('proj-core-arch');
+  const [projectId, setProjectId] = useState<string>('00000000-0000-0000-0000-000000000000');
   const [dueDate, setDueDate] = useState<string>('');
   const [dueTime, setDueTime] = useState<string>('');
   const [estimatedMinutes, setEstimatedMinutes] = useState<number | null>(null);
@@ -69,7 +69,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setTitle(task.title || '');
       setDescription(task.description || '');
       setPriority(task.priority || 4);
-      setProjectId(task.project_id || projects[0]?.id || 'proj-core-arch');
+      setProjectId(task.project_id || projects[0]?.id || '00000000-0000-0000-0000-000000000000');
       setDueDate(task.dueDate || '');
       setDueTime(task.dueTime ? task.dueTime.slice(0, 5) : '');
       setEstimatedMinutes(task.estimatedMinutes || null);

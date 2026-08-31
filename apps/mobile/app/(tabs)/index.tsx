@@ -18,6 +18,7 @@ import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
 import { getOrderIndexBetween, calculateNextRecurrence, type ParsedTaskInput } from '@app/core';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
 import { type CompressedAttachment } from '../../src/lib/imageCompressor';
 
@@ -45,9 +46,9 @@ export default function TodayScreen() {
   ]);
 
   const [projects, setProjects] = useState<ProjectItem[]>([
-    { id: 'proj-core-arch', name: 'Core Architecture', color: '#3B82F6', taskCount: 2 },
-    { id: 'proj-mobile-ux', name: 'Mobile UX', color: '#8B5CF6', taskCount: 1 },
-    { id: 'proj-media', name: 'Media Storage', color: '#10B981', taskCount: 1 },
+    { id: '00000000-0000-0000-0000-000000000000', name: 'Core Architecture', color: '#3B82F6', taskCount: 2 },
+    { id: '11111111-1111-1111-1111-111111111111', name: 'Mobile UX', color: '#8B5CF6', taskCount: 1 },
+    { id: '22222222-2222-2222-2222-222222222222', name: 'Media Storage', color: '#10B981', taskCount: 1 },
   ]);
 
   const [tasks, setTasks] = useState<TaskItemProps[]>([
@@ -137,7 +138,7 @@ export default function TodayScreen() {
 
         const nextTask: TaskItemProps = {
           ...target,
-          id: `rec-${Date.now()}`,
+          id: Crypto.randomUUID(),
           completed: false,
           dueDate: nextRecurrence.nextDueDate,
           dueTime: nextRecurrence.nextDueTime,
@@ -163,7 +164,7 @@ export default function TodayScreen() {
 
   const handleCreateSection = (name: string) => {
     const newSec: KanbanSection = {
-      id: `sec-${Date.now()}`,
+      id: Crypto.randomUUID(),
       name,
       orderIndex: getOrderIndexBetween(sections[sections.length - 1]?.orderIndex, null),
     };
@@ -227,7 +228,7 @@ export default function TodayScreen() {
 
   const handleInviteMember = (email: string, role: 'editor' | 'viewer') => {
     const newMember: ProjectMember = {
-      id: `user-${Date.now()}`,
+      id: Crypto.randomUUID(),
       name: email.split('@')[0],
       email,
       role,
@@ -253,7 +254,7 @@ export default function TodayScreen() {
 
   const handleCreateProject = (name: string, color: string) => {
     const newProj: ProjectItem = {
-      id: `proj-${Date.now()}`,
+      id: Crypto.randomUUID(),
       name,
       color,
       taskCount: 0,
@@ -275,7 +276,7 @@ export default function TodayScreen() {
     const finalProjectName = parsed.projectName || (activeProject ? activeProject.name : 'Inbox');
 
     const newTask: TaskItemProps = {
-      id: String(Date.now()),
+      id: Crypto.randomUUID(),
       title: parsed.title,
       completed: false,
       priority: parsed.priority,

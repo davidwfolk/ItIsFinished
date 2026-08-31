@@ -38,7 +38,14 @@ This document serves as the permanent, living roadmap for the **It Is Finished**
 - [ ] **App Store Submission:** Prepare screenshots, metadata, and submit to the Apple App Store.
 - [ ] *(Optional)* **Google Play:** Android deployment workflow.
 
-## 🤝 Stage 7: Collaboration & Workspaces
-- [ ] **Architecture (Option 3 - Strict Separation):** Implement "Invisible Workspaces" where users strictly switch contexts between Personal and Work (no unified multi-email view initially). 
+## 🤝 Stage 7: Collaboration & Workspaces (Enterprise Architecture)
+- [ ] **Architecture (Strict Separation):** Implement "Invisible Workspaces" via PowerSync Tiered Data Hydration (sync all metadata globally, but only deep data for the active workspace).
+- [ ] **Asymmetric RLS:** Implement JWT custom claims for fast `SELECT` queries, and strict `EXISTS` database checks for `INSERT/UPDATE/DELETE` to ensure immediate revocation.
+- [ ] **Upload Queue Resilience:** Implement client-side cascading skips (DAG) in PowerSync to isolate validation errors without crashing the entire offline queue.
 - [ ] **Monetization Limit:** Determine the limit on how many "workspaces" a user can own or join on the Free version.
 - [ ] **Workspace Sharing:** UI for inviting users to a specific workspace via email.
+
+## 🔒 Stage 8: Enterprise Security & SOC2 Compliance Readiness
+- [ ] **Cryptographic TTLs (SQLCipher):** Encrypt the local SQLite database at rest using SQLCipher. Implement policy-driven TTLs (e.g., 7 days) that drop the decryption key from memory if the device hasn't pinged the server.
+- [ ] **15-Minute JWT Expiry:** Lower Supabase JWT expiration to 15 minutes (with silent background refreshes) to drastically shrink the read-exfiltration window upon termination.
+- [ ] **Database Audit Logging:** Implement a Postgres-level audit trail (e.g., `pgaudit` or custom triggers) to track `who` changed `what` and `when` for strict SOC2 compliance.

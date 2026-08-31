@@ -13,8 +13,8 @@ bucket_definitions:
       - SELECT * FROM time_blocks WHERE user_id = bucket.current_user_id
       - SELECT * FROM focus_sessions WHERE user_id = bucket.current_user_id
 
-  # 2. Workspaces Stream (All data belonging to Workspaces the user is a member of)
-  workspaces_stream:
+  # 2. Workspace Metadata Stream (Lightweight structure for ALL authorized workspaces to enable offline switching)
+  workspace_metadata:
     parameters:
       - SELECT workspace_id FROM workspace_members WHERE user_id = request.user_id()
     data:
@@ -22,11 +22,21 @@ bucket_definitions:
       - SELECT * FROM workspace_members WHERE workspace_id = bucket.workspace_id
       - SELECT * FROM projects WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM sections WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
-      - SELECT * FROM tasks WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM tags WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM habits WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
       - SELECT * FROM saved_filters WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
-      - SELECT * FROM habit_logs WHERE workspace_id = bucket.workspace_id
-      - SELECT * FROM task_tags WHERE workspace_id = bucket.workspace_id
-      - SELECT * FROM comments WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
-      - SELECT * FROM attachments WHERE workspace_id = bucket.workspace_id AND deleted_at IS NULL
+
+  # 3. Workspace Deep Data Stream (Heavy data ONLY for the active workspace to prevent bloat)
+  workspace_deep_data:
+    parameters:
+      # Reads the active_workspace_id from the user's JWT metadata
+      - SELECT request.jwt_claim('user_metadata')->>'active_workspace_id' as active_id
+        WHERE request.jwt_claim('user_metadata')->>'active_workspace_id' IS NOT NULL
+        -- Security check: Ensure they are actually a member of this active workspace
+        AND EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = (request.jwt_claim('user_metadata')->>'active_workspace_id')::uuid AND user_id = request.user_id())
+    data:
+      - SELECT * FROM tasks WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
+      - SELECT * FROM habit_logs WHERE workspace_id = (bucket.active_id)::uuid
+      - SELECT * FROM task_tags WHERE workspace_id = (bucket.active_id)::uuid
+      - SELECT * FROM comments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
+      - SELECT * FROM attachments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
