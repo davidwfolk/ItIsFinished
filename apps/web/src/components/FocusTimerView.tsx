@@ -27,7 +27,7 @@ export function FocusTimerView({ initialTaskId }: FocusTimerViewProps) {
     `SELECT t.*, p.name as project_name 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
-     WHERE t.deleted_at IS NULL AND t.completed_at IS NULL
+     WHERE t.deleted_at IS NULL AND t.completed_at IS NULL AND t.parent_id IS NULL
      ORDER BY t.order_index ASC`
   );
 

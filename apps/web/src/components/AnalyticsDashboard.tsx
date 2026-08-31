@@ -13,7 +13,7 @@ export function AnalyticsDashboard() {
 
   // Fetch actual tasks
   const { data: allTasks = [] } = useQuery<any>(
-    `SELECT * FROM tasks WHERE deleted_at IS NULL`
+    `SELECT * FROM tasks WHERE deleted_at IS NULL AND parent_id IS NULL`
   );
 
   // Fetch actual focus sessions
