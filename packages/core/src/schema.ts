@@ -131,6 +131,7 @@ export const attachments = new Table({
 });
 
 export const focus_sessions = new Table({
+  workspace_id: column.text,
   user_id: column.text,
   task_id: column.text,
   duration_minutes: column.integer,
@@ -169,6 +170,7 @@ export const workspace_members = new Table({
 });
 
 export const time_blocks = new Table({
+  workspace_id: column.text,
   user_id: column.text,
   task_id: column.text,
   date: column.text,

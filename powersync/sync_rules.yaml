@@ -10,8 +10,6 @@ bucket_definitions:
       - SELECT request.user_id() as current_user_id
     data:
       - SELECT * FROM profiles WHERE id = bucket.current_user_id
-      - SELECT * FROM time_blocks WHERE user_id = bucket.current_user_id
-      - SELECT * FROM focus_sessions WHERE user_id = bucket.current_user_id
 
   # 2. Workspace Metadata Stream (Lightweight structure for ALL authorized workspaces to enable offline switching)
   workspace_metadata:
@@ -40,3 +38,5 @@ bucket_definitions:
       - SELECT * FROM task_tags WHERE workspace_id = (bucket.active_id)::uuid
       - SELECT * FROM comments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
       - SELECT * FROM attachments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
+      - SELECT * FROM time_blocks WHERE workspace_id = (bucket.active_id)::uuid
+      - SELECT * FROM focus_sessions WHERE workspace_id = (bucket.active_id)::uuid

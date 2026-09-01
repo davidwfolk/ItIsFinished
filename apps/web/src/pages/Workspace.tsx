@@ -10,7 +10,15 @@ import {
   type SavedSmartFilter, 
   type TaskRow, 
   type ProjectRow,
-  type SectionRow
+  type SectionRow,
+  createProject,
+  updateProject,
+  deleteProject,
+  createSection,
+  createTask,
+  updateTask,
+  deleteTask as coreDeleteTask,
+  toggleTask as coreToggleTask
 } from '@app/core';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { 
@@ -273,21 +281,12 @@ export function Workspace() {
   }, [quickAddText]);
 
   const handleSaveProject = async (name: string, color: string, icon: string) => {
-    const now = new Date().toISOString();
-
+    if (!activeWorkspaceId) return;
     try {
       if (editingProject) {
-        await powersync.execute(
-          `UPDATE projects SET name = ?, color = ?, icon = ?, updated_at = ? WHERE id = ?`,
-          [name, color, icon, now, editingProject.id]
-        );
+        await updateProject(powersync, activeWorkspaceId, editingProject.id, { name, color, icon });
       } else {
-        const newId = crypto.randomUUID();
-        await powersync.execute(
-          `INSERT INTO projects (id, workspace_id, name, color, icon, order_index, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [newId, activeWorkspaceId, name, color, icon, 'a0', now, now]
-        );
+        const newId = await createProject(powersync, activeWorkspaceId, { name, color, icon, order_index: 'a0' });
         setSelectedProjectId(newId);
         setActiveTab('today');
       }
@@ -298,9 +297,9 @@ export function Workspace() {
   };
 
   const handleDeleteProject = async (id: string) => {
-    const now = new Date().toISOString();
+    if (!activeWorkspaceId) return;
     try {
-      await powersync.execute(`UPDATE projects SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+      await deleteProject(powersync, activeWorkspaceId, id);
       if (selectedProjectId === id) setSelectedProjectId(null);
     } catch (err) {
       console.error('Failed to delete project in SQLite:', err);
@@ -379,54 +378,43 @@ export function Workspace() {
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickAddText.trim()) return;
+    if (!quickAddText.trim() || !activeWorkspaceId) return;
 
     const parsed = parseQuickAdd(quickAddText);
     const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
     const newIndex = getOrderIndexBetween(lastIndex, null);
-    const now = new Date().toISOString();
-    const newId = crypto.randomUUID();
-
 
     const projectName = parsed.projectName || 'Inbox';
-    let targetProjectId = '00000000-0000-0000-0000-000000000000';
+    let targetProjectId = null;
 
     try {
       // Find or auto-create project
-      const existing = await powersync.getOptional<{ id: string }>(
-        `SELECT id FROM projects WHERE LOWER(name) = LOWER(?) AND deleted_at IS NULL LIMIT 1`,
-        [projectName]
-      );
-
-      if (existing?.id) {
-        targetProjectId = existing.id;
-      } else {
-        targetProjectId = crypto.randomUUID();
-        await powersync.execute(
-          `INSERT INTO projects (id, workspace_id, name, color, order_index, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [targetProjectId, activeWorkspaceId, projectName, '#3B82F6', 'a0', now, now]
+      if (projectName !== 'Inbox') {
+        const existing = await powersync.getOptional<{ id: string }>(
+          `SELECT id FROM projects WHERE LOWER(name) = LOWER(?) AND deleted_at IS NULL LIMIT 1`,
+          [projectName]
         );
+
+        if (existing?.id) {
+          targetProjectId = existing.id;
+        } else {
+          targetProjectId = await createProject(powersync, activeWorkspaceId, {
+            name: projectName,
+            color: '#3B82F6',
+            order_index: 'a0'
+          });
+        }
       }
 
-      await powersync.execute(
-        `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          newId,
-          activeWorkspaceId,
-          targetProjectId,
-          parsed.title,
-          parsed.priority || 4,
-          parsed.dueDate || null,
-          parsed.dueTime || null,
-          parsed.estimatedMinutes || null,
-          newIndex,
-          'todo',
-          now,
-          now
-        ]
-      );
+      await createTask(powersync, activeWorkspaceId, {
+        title: parsed.title,
+        project_id: targetProjectId,
+        priority: parsed.priority || 4,
+        due_date: parsed.dueDate || null,
+        due_time: parsed.dueTime || null,
+        estimated_minutes: parsed.estimatedMinutes || null,
+        order_index: newIndex
+      });
       setQuickAddText('');
     } catch (err) {
       console.error('Failed to insert task into SQLite:', err);
@@ -434,44 +422,11 @@ export function Workspace() {
   };
 
   const toggleTask = async (id: string) => {
-    const task = tasks.find(t => t.id === id);
+    if (!activeWorkspaceId) return;
+    const task = rawTasks.find(t => t.id === id);
     if (!task) return;
-    const isCompleted = !task.completed;
-    const now = new Date().toISOString();
-
     try {
-      await powersync.execute(
-        `UPDATE tasks SET completed_at = ?, status = ?, updated_at = ? WHERE id = ?`,
-        [isCompleted ? now : null, isCompleted ? 'done' : 'todo', now, id]
-      );
-
-      // Auto-Roll Recurrence Engine in SQLite
-      if (isCompleted && task.recurrence_rule) {
-        const next = calculateNextRecurrence(task.due_date, task.due_time, task.recurrence_rule);
-        const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].order_index : null;
-        const newIndex = getOrderIndexBetween(lastIndex, null);
-        const nextId = crypto.randomUUID();
-
-        await powersync.execute(
-          `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            nextId,
-            activeWorkspaceId,
-            task.project_id || '00000000-0000-0000-0000-000000000000',
-            task.title,
-            task.priority,
-            next.nextDueDate,
-            next.nextDueTime,
-            task.estimated_minutes,
-            task.recurrence_rule,
-            newIndex,
-            'todo',
-            now,
-            now
-          ]
-        );
-      }
+      await coreToggleTask(powersync, activeWorkspaceId, task);
     } catch (err) {
       console.error('Failed to toggle task in SQLite:', err);
     }
@@ -568,12 +523,9 @@ export function Workspace() {
   };
 
   const deleteTask = async (id: string) => {
-    const now = new Date().toISOString();
+    if (!activeWorkspaceId) return;
     try {
-      await powersync.execute(
-        `UPDATE tasks SET deleted_at = ?, updated_at = ? WHERE id = ?`,
-        [now, now, id]
-      );
+      await coreDeleteTask(powersync, activeWorkspaceId, id);
     } catch (err) {
       console.error('Failed to soft delete task in SQLite:', err);
     }

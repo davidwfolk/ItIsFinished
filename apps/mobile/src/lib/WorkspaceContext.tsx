@@ -1,52 +1,125 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase, powersync } from './powersync';
+import { supabase, setupPowerSync } from './powersync';
 import { SupabaseConnector } from './SupabaseConnector';
-import { checkAndEnforceTTL } from './sqlcipher';
+import { checkAndEnforceTTL, getOrGenerateEncryptionKey } from './sqlcipher';
+import { PowerSyncContext, usePowerSync } from '@powersync/react';
+import { useRouter, useSegments } from 'expo-router';
+import { AbstractPowerSyncDatabase } from '@powersync/common';
 
 interface WorkspaceContextType {
   activeWorkspaceId: string | null;
   switchWorkspace: (workspaceId: string) => Promise<void>;
   isLoading: boolean;
+  syncStatus: any;
+  isAuthenticated: boolean;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType>({
   activeWorkspaceId: null,
   switchWorkspace: async () => {},
   isLoading: true,
+  syncStatus: null,
+  isAuthenticated: false,
 });
 
-export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
+export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [connector] = useState(() => new SupabaseConnector());
+  const [powerSyncDb, setPowerSyncDb] = useState<AbstractPowerSyncDatabase | null>(null);
+  
+  const segments = useSegments();
+  const router = useRouter();
 
   useEffect(() => {
-    // Initial setup
+    let mounted = true;
+
     const init = async () => {
       // 1. Check TTL and Enforce SQLCipher lock before accessing DB
       const isLocked = await checkAndEnforceTTL();
       if (isLocked) {
-        console.warn('TTL Expired. Database is cryptographically locked.');
-        // UI should render a lock screen
+        console.warn('TTL Expired or Keystore Invalidated. Database is cryptographically locked.');
+        if (mounted) {
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          router.replace('/login');
+        }
         return;
       }
 
-      // 2. Load active workspace from user metadata (JWT)
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentActiveId = user?.user_metadata?.active_workspace_id || null;
-      setActiveWorkspaceId(currentActiveId);
+      // 2. Load active workspace & Auth state
+      // COLD BOOT TRAP: Rely on getSession() which checks local storage for the refresh token.
+      // If there is a network error, supabase-js still returns the session from storage.
+      const { data: { session }, error } = await supabase.auth.getSession();
       
-      // 3. Connect PowerSync (will automatically pull the deep data for the active workspace)
-      await powersync.connect(connector);
-      setIsLoading(false);
+      if (error && error.message.includes('Invalid Refresh Token')) {
+        // Token was explicitly revoked by the server
+        console.error('Session revoked:', error.message);
+        if (mounted) {
+          setIsAuthenticated(false);
+          router.replace('/login');
+        }
+        return;
+      } else if (!session) {
+        if (mounted) {
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          router.replace('/login');
+        }
+        return;
+      }
+
+      if (mounted) setIsAuthenticated(true);
+      const currentActiveId = session.user?.user_metadata?.active_workspace_id || null;
+      if (mounted) setActiveWorkspaceId(currentActiveId);
+      
+      // 3. Initialize SQLCipher and connect PowerSync
+      try {
+        const key = await getOrGenerateEncryptionKey();
+        const db = await setupPowerSync(key);
+        if (mounted) setPowerSyncDb(db);
+        
+        await db.connect(connector);
+      } catch (err) {
+        console.error('Failed to init PowerSync:', err);
+      }
+      
+      if (mounted) setIsLoading(false);
     };
+
     init();
-  }, [connector]);
+
+    // Listen for Auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        setActiveWorkspaceId(null);
+        if (powerSyncDb) await powerSyncDb.disconnectAndClear();
+        router.replace('/login');
+      } else if (event === 'SIGNED_IN' && session) {
+        setIsAuthenticated(true);
+        setActiveWorkspaceId(session.user?.user_metadata?.active_workspace_id || null);
+        
+        const key = await getOrGenerateEncryptionKey();
+        const db = await setupPowerSync(key);
+        setPowerSyncDb(db);
+        await db.connect(connector);
+        router.replace('/(tabs)');
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [connector, router]);
 
   const switchWorkspace = async (workspaceId: string) => {
     setIsLoading(true);
     try {
-      // 1. Update Supabase Auth to mint a new JWT with the new active_workspace_id
       const { data, error } = await supabase.auth.updateUser({
         data: { active_workspace_id: workspaceId }
       });
@@ -54,9 +127,10 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
 
       setActiveWorkspaceId(workspaceId);
 
-      // 2. Disconnect and reconnect PowerSync to trigger the Tiered Hydration parameter swap
-      await powersync.disconnect();
-      await powersync.connect(connector);
+      if (powerSyncDb) {
+        await powerSyncDb.disconnect();
+        await powerSyncDb.connect(connector);
+      }
     } catch (err) {
       console.error('Failed to switch workspaces:', err);
     } finally {
@@ -65,10 +139,19 @@ export const WorkspaceProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <WorkspaceContext.Provider value={{ activeWorkspaceId, switchWorkspace, isLoading }}>
-      {children}
-    </WorkspaceContext.Provider>
+    <PowerSyncContext.Provider value={powerSyncDb as any}>
+      <WorkspaceContext.Provider value={{ activeWorkspaceId, switchWorkspace, isLoading, syncStatus: null, isAuthenticated }}>
+        {children}
+      </WorkspaceContext.Provider>
+    </PowerSyncContext.Provider>
   );
 };
 
-export const useWorkspace = () => useContext(WorkspaceContext);
+export const useWorkspace = () => {
+  const context = useContext(WorkspaceContext);
+  const powerSync = usePowerSync();
+  return {
+    ...context,
+    syncStatus: powerSync?.currentStatus
+  };
+};

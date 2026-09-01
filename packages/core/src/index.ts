@@ -8,3 +8,4 @@ export * from './auth';
 export * from './presence';
 export * from './filters';
 export * from './recurrence';
+export * from './mutations';
