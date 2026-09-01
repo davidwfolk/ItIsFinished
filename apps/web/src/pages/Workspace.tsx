@@ -1,8 +1,9 @@
+import { supabase } from '../lib/powersync';
 import { useState, useMemo } from 'react';
 import { 
   parseQuickAdd, 
   getOrderIndexBetween, 
-  calculateNextRecurrence,
+  
   formatRecurrenceLabel,
   DEFAULT_SMART_FILTERS, 
   evaluateFilterRule,
@@ -14,9 +15,9 @@ import {
   createProject,
   updateProject,
   deleteProject,
-  createSection,
+  
   createTask,
-  updateTask,
+  
   deleteTask as coreDeleteTask,
   toggleTask as coreToggleTask
 } from '@app/core';
@@ -408,7 +409,7 @@ export function Workspace() {
 
       await createTask(powersync, activeWorkspaceId, {
         title: parsed.title,
-        project_id: targetProjectId,
+        project_id: targetProjectId as string,
         priority: parsed.priority || 4,
         due_date: parsed.dueDate || null,
         due_time: parsed.dueTime || null,
