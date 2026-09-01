@@ -14,6 +14,7 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <AppProvider>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#09090B' } }}>
+          <Stack.Screen name="login" />
           <Stack.Screen name="(tabs)" />
         </Stack>
       </AppProvider>

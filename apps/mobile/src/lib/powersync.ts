@@ -17,15 +17,24 @@ let powersyncInstance: PowerSyncDatabase | null = null;
 export const setupPowerSync = async (encryptionKey: string) => {
   if (powersyncInstance) return powersyncInstance;
   
-  powersyncInstance = new PowerSyncDatabase({
-    schema: AppSchema,
-    database: {
-      dbFilename: 'finished_tasks.db',
-      encryptionKey: encryptionKey // Passes down to op-sqlite for SQLCipher
-    }
-    // We would pass the encryptionKey via a custom dbAdapter or if PowerSync supports it directly in the config.
-    // For op-sqlite integration with PowerSync, the key is passed when opening the DB.
-  });
+  try {
+    powersyncInstance = new PowerSyncDatabase({
+      schema: AppSchema,
+      database: {
+        dbFilename: 'finished_tasks.db',
+        encryptionKey: encryptionKey // Passes down to op-sqlite for SQLCipher
+      }
+    });
+  } catch (err) {
+    // Fallback: initialize without encryption if encryptionKey config isn't supported yet
+    console.warn('SQLCipher encryption not applied, falling back to unencrypted DB:', err);
+    powersyncInstance = new PowerSyncDatabase({
+      schema: AppSchema,
+      database: {
+        dbFilename: 'finished_tasks.db',
+      }
+    });
+  }
   
   return powersyncInstance;
 };

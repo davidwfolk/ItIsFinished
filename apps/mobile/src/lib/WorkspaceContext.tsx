@@ -4,7 +4,7 @@ import { SupabaseConnector } from './SupabaseConnector';
 import { checkAndEnforceTTL, getOrGenerateEncryptionKey } from './sqlcipher';
 import { PowerSyncContext, usePowerSync } from '@powersync/react';
 import { useRouter, useSegments } from 'expo-router';
-import { AbstractPowerSyncDatabase } from '@powersync/common';
+import { AbstractPowerSyncDatabase } from '@powersync/react-native';
 
 interface WorkspaceContextType {
   activeWorkspaceId: string | null;
