@@ -1,82 +1,98 @@
-# iOS Physical Device Build & Deployment Guide (Mac Mini)
+# iOS Build Guide — Mac Mini → iPhone (Updated 2026-09-01)
 
-> **To the AI Assistant or Developer on the Mac Mini:**
-> **Root Cause of "No script URL provided":** 
-> Previously, `expo-dev-client` was missing from `app.json` plugins. This has now been fixed in `main`.
-> 
-> You have **Two Options** to install onto the user's physical iPhone:
-> - **Option 1 (Recommended - Standalone Offline App):** Embeds the JS bundle directly inside the app. The phone will run **100% standalone** with offline SQLite without needing a computer running Metro.
-> - **Option 2 (Dev Client with Live Reload):** Builds with Expo Dev Launcher so the user can enter their PC's IP or connect via Wi-Fi for live hot-reloading.
+> **3 bootability fixes have been committed to `main`.** Pull before building.
+>
+> You have **two build modes**:
+> - **Dev Client (Debug):** Build once, then hot-reload code changes instantly over Wi-Fi. Best for iterating.
+> - **Standalone (Release):** App works forever on the phone, no computer needed. Rebuild for each change.
 
 ---
 
-## 📋 Prerequisites Checklist on Mac Mini
+## Prerequisites on Mac Mini
 
-1. **Mac Mini**: macOS with **Xcode** installed.
+1. **Xcode** installed (with iOS Simulator support)
 2. **Xcode Command Line Tools**: `xcode-select --install`
 3. **CocoaPods**: `brew install cocoapods`
-4. **Node.js**: v20+ or v22 LTS (`node -v`)
+4. **Node.js**: v20+ (`node -v`)
 5. **Physical iPhone**:
-   * Plugged into Mac Mini via USB.
-   * Unlocked & tapped **"Trust This Computer"**.
-   * **Developer Mode ON** (iPhone *Settings -> Privacy & Security -> Developer Mode -> ON* -> restart).
+   - Plugged into Mac Mini via USB
+   - Unlocked & tapped **"Trust This Computer"**
+   - **Developer Mode ON** (Settings → Privacy & Security → Developer Mode → ON → restart)
 
 ---
 
-## 🚀 Option 1: Build Standalone Offline App (No Packager/Server Needed!)
-
-This compiles the JavaScript bundle directly into the app binary so it runs on the iPhone immediately without any "no script URL" errors.
+## Build Steps (Both Modes)
 
 ```bash
-# 1. Pull the latest code:
-git pull origin main
+# 1. Clone and install
+git clone https://github.com/davidwfolk/ItIsFinished.git
+cd ItIsFinished
 npm install
 
-# 2. Clean prebuild iOS project with native plugins:
+# 2. Build the shared @app/core package first
+npm run build
+
+# 3. Generate native iOS project
 cd apps/mobile
 npx expo prebuild --platform ios --clean
-cd ios && pod install && cd ../../..
 
-# 3. Open in Xcode:
-open apps/mobile/ios/Finished.xcworkspace
+# 4. Install CocoaPods
+cd ios && pod install && cd ..
+
+# 5. Open in Xcode
+open ios/Finished.xcworkspace
 ```
-
-### In Xcode:
-1. Click the top blue **Finished** project icon in the left sidebar.
-2. Under **TARGETS**, select **Finished**.
-3. In **Signing & Capabilities**, check **"Automatically manage signing"** and select the user's **Personal Apple ID Team**.
-4. In the top menu bar of Xcode: Click **Product -> Scheme -> Edit Scheme...**
-   * Select **Run** on the left.
-   * Change **Build Configuration** from *Debug* to **Release**!
-   * Click **Close**.
-5. Select the **connected physical iPhone** in the device dropdown at the top.
-6. Click **Play ▶️ (Cmd + R)**.
-
-> 🎉 **Result:** The app compiles, installs, and boots immediately on the iPhone with full offline PowerSync SQLite database and dark mode UI. No server or packager needed!
 
 ---
 
-## 🛠️ Option 2: Build with Expo Dev Client (For Live Wi-Fi Hot Reloading)
+## In Xcode
 
-If you want live hot-reloading from the Windows PC:
+1. Click the **Finished** project in the left sidebar
+2. Under **TARGETS**, select **Finished**
+3. **Signing & Capabilities** → check **"Automatically manage signing"** → select your **Personal Apple ID Team**
+4. Select your **connected physical iPhone** in the device dropdown at the top
 
-```bash
-cd apps/mobile
-npx expo prebuild --platform ios --clean
-cd ios && pod install && cd ../../..
-open apps/mobile/ios/Finished.xcworkspace
-```
+### For Dev Client (hot-reload while iterating):
+5. **Product → Scheme → Edit Scheme → Run → Build Configuration → Debug**
+6. Click **Play ▶️ (Cmd + R)** — builds and installs on phone (~5 min first time)
+7. Back in Terminal, start Metro:
+   ```bash
+   cd apps/mobile
+   npx expo start --dev-client
+   ```
+8. On the phone, the Expo Dev Launcher will appear — tap your Mac Mini's URL or scan the QR code
+9. **Code changes now hot-reload instantly** — no rebuild needed
 
-1. In Xcode, ensure **Automatically manage signing** is checked with the Apple ID Team.
-2. Keep Build Configuration as **Debug**.
-3. Select the physical iPhone and click **Play ▶️ (Cmd + R)**.
-4. **On the iPhone:** The app will now open the **Expo Dev Launcher Screen** with buttons to enter your PC's IP (`192.168.1.132:8081`) or scan QR code.
+### For Standalone (permanent, no computer needed):
+5. **Product → Scheme → Edit Scheme → Run → Build Configuration → Release**
+6. Click **Play ▶️ (Cmd + R)** — builds and installs on phone (~5 min)
+7. Done. App runs independently.
 
 ---
 
-## 📱 First-Time Launch: "Untrusted Developer" Fix
+## Switching Between Modes
+
+Same Xcode project, same code. Just change the Build Configuration dropdown:
+- **Debug** = Dev Client (needs Metro running)
+- **Release** = Standalone (no dependencies)
+
+Then rebuild (Cmd + R). That's it.
+
+---
+
+## First-Time Launch: "Untrusted Developer" Fix
 
 If iOS blocks launching with *"Untrusted Developer"*:
-1. Go to iPhone **Settings -> General -> VPN & Device Management**.
-2. Tap your Apple ID under **Developer App**.
-3. Tap **"Trust [Your Apple ID]"** and confirm.
+1. Go to iPhone **Settings → General → VPN & Device Management**
+2. Tap your Apple ID under **Developer App**
+3. Tap **"Trust [Your Apple ID]"** and confirm
+
+---
+
+## What You'll See
+
+The app will boot to a **login screen**. You can:
+- **Sign in** with your Supabase credentials (if you have an account)
+- **Tap "Skip for now"** to go straight to the 5-tab UI with mock data
+
+The 5 tabs (Today, Calendar, Habits, Matrix, Focus) all work with in-memory mock data. We'll wire them to real PowerSync/Supabase data as the next step.
