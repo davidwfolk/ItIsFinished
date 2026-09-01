@@ -90,7 +90,7 @@ export interface ViewTask {
 }
 
 
-import { supabase } from '../lib/powersync';
+
 
 export function Workspace() {
   const navigate = useNavigate();
