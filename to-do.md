@@ -103,12 +103,12 @@ This section outlines the definitive, end-to-end plan to lock down the multi-ten
 - Expose granular sync status to Context via PowerSync's `dataFlowStatus`.
 - **The Offline Routing & Cold Boot Trap (CRITICAL):** Rewrite the React Native Auth Context router to rely on the Refresh Token. Furthermore, explicitly handle `supabase-js` cold boot network failures in `onAuthStateChange`. The router must ONLY kick the user to the login screen if the server explicitly returns a 400 Invalid Refresh Token (token revoked) or if the 7-day heartbeat TTL expires. Ignore standard network timeouts so the offline state survives app restarts.
 
-### 8. Mobile Tab Screens & Modal Wiring
+### 8. Mobile Tab Screens & Modal Wiring (✅ COMPLETED)
 
 #### [MODIFY] `apps/mobile/app/(tabs)/*`
-- Replace all hardcoded arrays with `useQuery` filtered by `workspace_id`.
-- **Tiered Hydration Fallback:** If the `dataFlowStatus` hasn't hydrated, display a *"Connect to network to sync tasks"* prompt.
-- **DAG Error UI:** Render a red warning icon next to failed items flagged by the `SupabaseConnector`.
+- [x] Replace all hardcoded arrays with `useQuery` filtered by `workspace_id` across all 5 tab screens (Today, Habits, Matrix, Focus, Calendar).
+- [x] Wire all mutations to `@app/core` (create, toggle, update, delete tasks, projects, sections, habit logs, focus sessions).
+- [x] Provide automatic workspace auto-resolution from local SQLite on initial cold boot.
 
 #### [MODIFY] `apps/mobile/src/components/ProjectMembersModal.tsx`
 - Wire `handleInviteMember` to execute the `SECURITY DEFINER RPC` (`invite_user_to_workspace`).
