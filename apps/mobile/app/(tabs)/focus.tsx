@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,11 @@ import {
   ScrollView 
 } from 'react-native';
 import { FocusTimer, type FocusTask } from '../../src/components/FocusTimer';
+import { usePowerSync, useQuery } from '@powersync/react';
+import { useWorkspace } from '../../src/lib/WorkspaceContext';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import * as Crypto from 'expo-crypto';
 
 interface CompletedSession {
   id: string;
@@ -18,50 +22,88 @@ interface CompletedSession {
 }
 
 export default function FocusScreen() {
-  const [tasks] = useState<FocusTask[]>([
-    { id: '1', title: 'Review Supabase RLS security policies', project: 'Core Architecture' },
-    { id: '2', title: 'Verify lexicographical string indexing reorders', project: 'Core Architecture' },
-    { id: '3', title: 'Test 120 FPS swipe gestures with tactile haptics', project: 'Mobile UX' },
-    { id: '4', title: 'Integrate client image compression (~350KB target)', project: 'Media Storage' },
-  ]);
+  const powersync = usePowerSync();
+  const { activeWorkspaceId } = useWorkspace();
 
-  const [sessionLogs, setSessionLogs] = useState<CompletedSession[]>([
-    {
-      id: 's1',
-      taskTitle: 'Review Supabase RLS security policies',
-      durationMinutes: 25,
-      mode: 'focus',
-      completedAt: '10:30 AM',
-    },
-    {
-      id: 's2',
-      taskTitle: 'Verify lexicographical string indexing reorders',
-      durationMinutes: 25,
-      mode: 'focus',
-      completedAt: '02:15 PM',
-    },
-  ]);
+  // ---------------------------------------------------------------------------
+  // LIVE SQLITE QUERIES
+  // ---------------------------------------------------------------------------
+  const { data: rawTasks = [] } = useQuery<{ id: string; title: string; project?: string }>(
+    `SELECT t.id, t.title, p.name as project 
+     FROM tasks t 
+     LEFT JOIN projects p ON t.project_id = p.id 
+     WHERE t.completed_at IS NULL AND t.deleted_at IS NULL AND t.workspace_id = ? 
+     ORDER BY t.order_index ASC`,
+    [activeWorkspaceId]
+  );
 
-  const handleSessionComplete = (session: {
+  const { data: rawSessions = [] } = useQuery<{
+    id: string;
+    task_id?: string | null;
+    task_title?: string | null;
+    duration_minutes: number;
+    started_at?: string | null;
+    completed_at?: string | null;
+    created_at?: string | null;
+  }>(
+    `SELECT f.*, t.title as task_title 
+     FROM focus_sessions f 
+     LEFT JOIN tasks t ON f.task_id = t.id 
+     WHERE (f.workspace_id = ? OR f.workspace_id IS NULL) 
+     ORDER BY f.created_at DESC 
+     LIMIT 50`,
+    [activeWorkspaceId]
+  );
+
+  const tasks: FocusTask[] = useMemo(() => {
+    return rawTasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      project: t.project || 'General',
+    }));
+  }, [rawTasks]);
+
+  const sessionLogs: CompletedSession[] = useMemo(() => {
+    return rawSessions.map(s => ({
+      id: s.id,
+      taskTitle: s.task_title || 'General Deep Work',
+      durationMinutes: s.duration_minutes || 25,
+      mode: (s.duration_minutes && s.duration_minutes <= 10) ? 'break' : 'focus',
+      completedAt: s.completed_at 
+        ? new Date(s.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        : 'Just now',
+    }));
+  }, [rawSessions]);
+
+  const handleSessionComplete = async (session: {
     taskId?: string | null;
     taskTitle?: string;
     durationMinutes: number;
     mode: 'focus' | 'break';
     completedAt: string;
   }) => {
-    const newLog: CompletedSession = {
-      id: `s-${Date.now()}`,
-      taskTitle: session.taskTitle || 'General Deep Work',
-      durationMinutes: session.durationMinutes,
-      mode: session.mode,
-      completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setSessionLogs((prev) => [newLog, ...prev]);
+    if (!powersync || !activeWorkspaceId) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const newId = Crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      await powersync.execute(
+        `INSERT INTO focus_sessions (id, workspace_id, task_id, duration_minutes, started_at, completed_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [newId, activeWorkspaceId, session.taskId || null, session.durationMinutes, now, now, now]
+      );
+    } catch (err) {
+      console.error('Failed to log focus session:', err);
+    }
   };
 
-  const totalFocusMinutes = sessionLogs
-    .filter((s) => s.mode === 'focus')
-    .reduce((sum, s) => sum + s.durationMinutes, 0);
+  const totalFocusMinutes = useMemo(() => {
+    return sessionLogs
+      .filter((s) => s.mode === 'focus')
+      .reduce((sum, s) => sum + s.durationMinutes, 0);
+  }, [sessionLogs]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -75,7 +117,7 @@ export default function FocusScreen() {
 
           <View style={styles.statBadge}>
             <Ionicons name="flame" size={14} color="#F97316" />
-            <Text style={styles.statText}>{totalFocusMinutes}m Today</Text>
+            <Text style={styles.statText}>{totalFocusMinutes}m Logged</Text>
           </View>
         </View>
 
@@ -88,7 +130,7 @@ export default function FocusScreen() {
 
           {/* Today's Focus Session History */}
           <View style={styles.historyContainer}>
-            <Text style={styles.historyTitle}>Today's Focus Log</Text>
+            <Text style={styles.historyTitle}>Recent Focus Sessions</Text>
             <View style={styles.historyList}>
               {sessionLogs.map((log) => (
                 <View key={log.id} style={styles.historyItem}>
@@ -111,7 +153,7 @@ export default function FocusScreen() {
               ))}
 
               {sessionLogs.length === 0 && (
-                <Text style={styles.emptyText}>No focus sessions logged yet today.</Text>
+                <Text style={styles.emptyText}>No focus sessions logged yet.</Text>
               )}
             </View>
           </View>

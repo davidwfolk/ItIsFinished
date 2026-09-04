@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { usePowerSync, useQuery } from '@powersync/react';
+import { useWorkspace } from '../../src/lib/WorkspaceContext';
 
 interface ScheduledBlock {
   id: string;
@@ -48,72 +50,155 @@ function formatTimeTo12h(timeStr: string): string {
 }
 
 export default function CalendarScreen() {
+  const { activeWorkspaceId } = useWorkspace();
+
   const [selectedDay, setSelectedDay] = useState(0); // 0 = Today, 1 = Tomorrow, 2 = Next
   const [selectedMemberId, setSelectedMemberId] = useState<string>('all');
 
-  const teamMembers = [
-    { id: 'all', name: 'Everyone', color: '#3B82F6' },
-    { id: 'user-alex', name: 'Alex (You)', color: '#3B82F6' },
-    { id: 'user-sarah', name: 'Sarah K.', color: '#8B5CF6' },
-    { id: 'user-david', name: 'David W.', color: '#10B981' },
-  ];
+  // ---------------------------------------------------------------------------
+  // DYNAMIC 3-DAY TIMELINE
+  // ---------------------------------------------------------------------------
+  const days = useMemo(() => {
+    const list: { label: string; dateStr: string }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
+      list.push({ label, dateStr });
+    }
+    return list;
+  }, []);
 
-  const [blocks] = useState<ScheduledBlock[]>([
-    {
-      id: '1',
-      title: 'Deep Work: Core Sync Engine',
-      startTime: '09:00',
-      durationMinutes: 90,
-      priority: 1,
-      project: 'Core Architecture',
-      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
-    },
-    {
-      id: '2',
-      title: 'Client Demo & Roadmap Review',
-      startTime: '10:30',
-      durationMinutes: 60,
-      priority: 2,
-      project: 'Product',
-      assignedMember: { id: 'user-sarah', name: 'Sarah K.', color: '#8B5CF6' },
-    },
-    {
-      id: '3',
-      title: 'Review Storage RLS & Policies',
-      startTime: '11:30',
-      durationMinutes: 30,
-      priority: 2,
-      project: 'Security',
-      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
-    },
-    {
-      id: '4',
-      title: 'Database Migration & Benchmarking',
-      startTime: '13:00',
-      durationMinutes: 60,
-      priority: 1,
-      project: 'Core Architecture',
-      assignedMember: { id: 'user-david', name: 'David W.', color: '#10B981' },
-    },
-    {
-      id: '5',
-      title: 'Team Standup Sync',
-      startTime: '14:30',
-      durationMinutes: 15,
-      priority: 3,
-      project: 'General',
-      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
-    },
-    {
-      id: '6',
-      title: 'Time-Blocking Drag & Drop Polish',
-      startTime: '16:00',
-      durationMinutes: 60,
-      priority: 1,
-      project: 'Mobile UX',
-      assignedMember: { id: 'user-alex', name: 'Alex M.', color: '#3B82F6' },
-    },
-  ]);
+  const currentDateStr = days[selectedDay]?.dateStr || days[0].dateStr;
+
+  // ---------------------------------------------------------------------------
+  // LIVE SQLITE QUERIES
+  // ---------------------------------------------------------------------------
+  const { data: rawTimeBlocks = [] } = useQuery<{
+    id: string;
+    title: string;
+    start_time: string;
+    end_time: string;
+    priority: number;
+    project: string;
+    member_id?: string | null;
+    member_name?: string | null;
+  }>(
+    `SELECT 
+       tb.id, 
+       COALESCE(t.title, 'Scheduled Block') as title,
+       tb.start_time,
+       tb.end_time,
+       COALESCE(t.priority, 4) as priority,
+       COALESCE(p.name, 'General') as project,
+       prof.id as member_id,
+       prof.display_name as member_name
+     FROM time_blocks tb
+     LEFT JOIN tasks t ON tb.task_id = t.id
+     LEFT JOIN projects p ON t.project_id = p.id
+     LEFT JOIN profiles prof ON t.assigned_to = prof.id
+     WHERE tb.date = ? AND (tb.workspace_id = ? OR tb.workspace_id IS NULL)`,
+    [currentDateStr, activeWorkspaceId]
+  );
+
+  const { data: rawScheduledTasks = [] } = useQuery<{
+    id: string;
+    title: string;
+    due_time: string;
+    estimated_minutes?: number | null;
+    priority: number;
+    project: string;
+    member_id?: string | null;
+    member_name?: string | null;
+  }>(
+    `SELECT 
+       t.id,
+       t.title,
+       t.due_time,
+       t.estimated_minutes,
+       t.priority,
+       COALESCE(p.name, 'General') as project,
+       prof.id as member_id,
+       prof.display_name as member_name
+     FROM tasks t
+     LEFT JOIN projects p ON t.project_id = p.id
+     LEFT JOIN profiles prof ON t.assigned_to = prof.id
+     WHERE t.deleted_at IS NULL AND t.due_date = ? AND t.due_time IS NOT NULL AND t.workspace_id = ?`,
+    [currentDateStr, activeWorkspaceId]
+  );
+
+  const { data: rawMembers = [] } = useQuery<{ id: string; name: string; role: string }>(
+    `SELECT p.id, p.display_name as name, wm.role 
+     FROM workspace_members wm 
+     JOIN profiles p ON p.id = wm.user_id 
+     WHERE wm.workspace_id = ?`,
+    [activeWorkspaceId]
+  );
+
+  const teamMembers = useMemo(() => {
+    const defaultAll = [{ id: 'all', name: 'Everyone', color: '#3B82F6' }];
+    const members = rawMembers.map((m, i) => ({
+      id: m.id,
+      name: m.name || 'Member',
+      color: ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EC4899'][i % 5],
+    }));
+    return [...defaultAll, ...members];
+  }, [rawMembers]);
+
+  const blocks: ScheduledBlock[] = useMemo(() => {
+    const results: ScheduledBlock[] = [];
+    const seenTaskIds = new Set<string>();
+
+    // 1. Process explicit time_blocks
+    for (const b of rawTimeBlocks) {
+      let duration = 60;
+      if (b.start_time && b.end_time) {
+        const [sh, sm] = b.start_time.split(':').map(Number);
+        const [eh, em] = b.end_time.split(':').map(Number);
+        duration = Math.max(15, (eh * 60 + em) - (sh * 60 + sm));
+      }
+
+      results.push({
+        id: b.id,
+        title: b.title,
+        startTime: b.start_time?.slice(0, 5) || '09:00',
+        durationMinutes: duration,
+        priority: (b.priority || 4) as 1 | 2 | 3 | 4,
+        project: b.project,
+        assignedMember: b.member_id ? {
+          id: b.member_id,
+          name: b.member_name || 'Member',
+          color: '#3B82F6',
+        } : undefined,
+      });
+      seenTaskIds.add(b.id);
+    }
+
+    // 2. Process tasks scheduled for this day with a due_time
+    for (const t of rawScheduledTasks) {
+      if (!seenTaskIds.has(t.id)) {
+        results.push({
+          id: t.id,
+          title: t.title,
+          startTime: t.due_time.slice(0, 5),
+          durationMinutes: t.estimated_minutes || 45,
+          priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+          project: t.project,
+          assignedMember: t.member_id ? {
+            id: t.member_id,
+            name: t.member_name || 'Member',
+            color: '#8B5CF6',
+          } : undefined,
+        });
+      }
+    }
+
+    return results;
+  }, [rawTimeBlocks, rawScheduledTasks]);
 
   const priorityColors = {
     1: { bg: '#7F1D1D40', border: '#EF4444', text: '#FCA5A5' },
@@ -142,9 +227,9 @@ export default function CalendarScreen() {
 
           {/* Day Selector */}
           <View style={styles.daySelector}>
-            {['Today', 'Tomorrow', 'Friday'].map((day, idx) => (
+            {days.map((d, idx) => (
               <TouchableOpacity
-                key={day}
+                key={d.dateStr}
                 onPress={() => {
                   Haptics.selectionAsync();
                   setSelectedDay(idx);
@@ -152,7 +237,7 @@ export default function CalendarScreen() {
                 style={[styles.dayTab, selectedDay === idx && styles.dayTabActive]}
               >
                 <Text style={[styles.dayTabText, selectedDay === idx && styles.dayTabTextActive]}>
-                  {day}
+                  {d.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -283,6 +368,12 @@ export default function CalendarScreen() {
                     </TouchableOpacity>
                   );
                 })}
+
+              {blocks.length === 0 && (
+                <View style={styles.canvasEmptyHint}>
+                  <Text style={styles.canvasEmptyText}>No time blocks scheduled for this day</Text>
+                </View>
+              )}
             </View>
           </View>
         </ScrollView>
@@ -490,5 +581,17 @@ const styles = StyleSheet.create({
     color: '#C084FC',
     fontWeight: '700',
   },
+  canvasEmptyHint: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  canvasEmptyText: {
+    fontSize: 12,
+    color: '#52525B',
+    fontStyle: 'italic',
+  },
 });
-
