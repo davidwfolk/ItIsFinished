@@ -12,7 +12,7 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       throw new Error(`Could not fetch Supabase credentials: ${error?.message}`);
     }
     return {
-      endpoint: process.env.EXPO_PUBLIC_POWERSYNC_URL || 'https://foo.powersync.com',
+      endpoint: process.env.EXPO_PUBLIC_POWERSYNC_URL || 'https://6a9356a28453e7cf8332b2a9.powersync.journeyapps.com',
       token: session.access_token
     };
   }
@@ -48,7 +48,7 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
             break;
           }
           case UpdateType.PATCH: {
-            const { error } = await supabase.from(table).update(op.opData).eq('id', op.id);
+            const { error } = await supabase.from(table).update(op.opData || {}).eq('id', op.id);
             dbError = error;
             break;
           }

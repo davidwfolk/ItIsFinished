@@ -8,6 +8,7 @@ import { AbstractPowerSyncDatabase } from '@powersync/react-native';
 
 interface WorkspaceContextType {
   activeWorkspaceId: string | null;
+  setActiveWorkspaceId: (id: string | null) => void;
   switchWorkspace: (workspaceId: string) => Promise<void>;
   isLoading: boolean;
   syncStatus: any;
@@ -16,6 +17,7 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType>({
   activeWorkspaceId: null,
+  setActiveWorkspaceId: () => {},
   switchWorkspace: async () => {},
   isLoading: true,
   syncStatus: null,
@@ -81,6 +83,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (mounted) setPowerSyncDb(db);
         
         await db.connect(connector);
+
+        // If no active workspace is set in user metadata, default to the personal workspace from SQLite
+        if (!currentActiveId) {
+          try {
+            const ws = await db.getAll<{ id: string; is_personal: number }>(
+              `SELECT id, is_personal FROM workspaces ORDER BY is_personal DESC LIMIT 1`
+            );
+            if (ws.length > 0 && mounted) {
+              setActiveWorkspaceId(ws[0].id);
+            }
+          } catch (e) {
+            console.warn('Could not load initial workspace from SQLite:', e);
+          }
+        }
       } catch (err) {
         console.error('Failed to init PowerSync:', err);
       }
@@ -140,7 +156,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <PowerSyncContext.Provider value={powerSyncDb as any}>
-      <WorkspaceContext.Provider value={{ activeWorkspaceId, switchWorkspace, isLoading, syncStatus: null, isAuthenticated }}>
+      <WorkspaceContext.Provider value={{ activeWorkspaceId, setActiveWorkspaceId, switchWorkspace, isLoading, syncStatus: null, isAuthenticated }}>
         {children}
       </WorkspaceContext.Provider>
     </PowerSyncContext.Provider>

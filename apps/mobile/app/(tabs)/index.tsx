@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -15,7 +15,22 @@ import { ProjectPickerModal, type ProjectItem } from '../../src/components/Proje
 import { ProjectMembersModal, type ProjectMember } from '../../src/components/ProjectMembersModal';
 import { KanbanBoardView, type KanbanSection } from '../../src/components/KanbanBoardView';
 import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
-import { getOrderIndexBetween, calculateNextRecurrence, type ParsedTaskInput } from '@app/core';
+import { 
+  getOrderIndexBetween, 
+  type ParsedTaskInput,
+  createTask,
+  updateTask,
+  deleteTask as coreDeleteTask,
+  toggleTask as coreToggleTask,
+  createProject,
+  deleteProject as coreDeleteProject,
+  createSection,
+  type TaskRow,
+  type ProjectRow,
+  type SectionRow
+} from '@app/core';
+import { usePowerSync, useQuery } from '@powersync/react';
+import { useWorkspace } from '../../src/lib/WorkspaceContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Crypto from 'expo-crypto';
@@ -24,276 +39,317 @@ import { type CompressedAttachment } from '../../src/lib/imageCompressor';
 
 export default function TodayScreen() {
   const router = useRouter();
+  const powersync = usePowerSync();
+  const { activeWorkspaceId } = useWorkspace();
+
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
   const [membersModalVisible, setMembersModalVisible] = useState(false);
   const [weeklyReviewVisible, setWeeklyReviewVisible] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedTask, setSelectedTask] = useState<TaskItemProps | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  const [members, setMembers] = useState<ProjectMember[]>([
-    { id: 'user-alex', name: 'Alex M.', email: 'alex@finished.app', role: 'owner', color: '#3B82F6', isOnline: true },
-    { id: 'user-sarah', name: 'Sarah K.', email: 'sarah@finished.app', role: 'editor', color: '#8B5CF6', isOnline: true },
-    { id: 'user-david', name: 'David W.', email: 'david@finished.app', role: 'editor', color: '#10B981', isOnline: false },
-  ]);
+  // ---------------------------------------------------------------------------
+  // LIVE POWERSYNC SQLITE QUERIES
+  // ---------------------------------------------------------------------------
 
-  const [sections, setSections] = useState<KanbanSection[]>([
-    { id: 'sec-todo', name: 'To Do', orderIndex: 'a0' },
-    { id: 'sec-inprog', name: 'In Progress', orderIndex: 'a1' },
-    { id: 'sec-done', name: 'Done', orderIndex: 'a2' },
-  ]);
+  // Live Reactive Tasks Query
+  const { data: rawTasks = [] } = useQuery<TaskRow & { 
+    project_name?: string; 
+    project_color?: string;
+    assigned_name?: string;
+  }>(
+    `SELECT t.*, p.name as project_name, p.color as project_color, prof.display_name as assigned_name
+     FROM tasks t 
+     LEFT JOIN projects p ON t.project_id = p.id 
+     LEFT JOIN profiles prof ON t.assigned_to = prof.id
+     WHERE t.deleted_at IS NULL AND t.workspace_id = ? AND t.parent_id IS NULL
+     ORDER BY t.order_index ASC`,
+    [activeWorkspaceId]
+  );
 
-  const [projects, setProjects] = useState<ProjectItem[]>([
-    { id: '00000000-0000-0000-0000-000000000000', name: 'Core Architecture', color: '#3B82F6', taskCount: 2 },
-    { id: '11111111-1111-1111-1111-111111111111', name: 'Mobile UX', color: '#8B5CF6', taskCount: 1 },
-    { id: '22222222-2222-2222-2222-222222222222', name: 'Media Storage', color: '#10B981', taskCount: 1 },
-  ]);
+  // Live Reactive Projects Query with Task Counts
+  const { data: rawProjects = [] } = useQuery<ProjectRow & { task_count: number }>(
+    `SELECT p.*, count(t.id) as task_count 
+     FROM projects p 
+     LEFT JOIN tasks t ON t.project_id = p.id AND t.completed_at IS NULL AND t.deleted_at IS NULL AND t.parent_id IS NULL
+     WHERE p.deleted_at IS NULL AND p.workspace_id = ?
+     GROUP BY p.id 
+     ORDER BY p.order_index ASC, p.created_at ASC`,
+    [activeWorkspaceId]
+  );
 
-  const [tasks, setTasks] = useState<TaskItemProps[]>([
-    {
-      id: '1',
-      title: 'Review Supabase RLS security policies',
-      completed: true,
-      priority: 1,
-      project: 'Core Architecture',
-      dueDate: '2026-08-28',
-      dueTime: '10:00:00',
-      estimatedMinutes: 30,
-      tags: ['security', 'db'],
-      orderIndex: 'a0',
-      onToggleComplete: () => {},
-    },
-    {
-      id: '2',
-      title: 'Verify lexicographical string indexing reorders',
-      completed: true,
-      priority: 2,
-      project: 'Core Architecture',
-      dueDate: '2026-08-28',
-      dueTime: '14:00:00',
-      estimatedMinutes: 45,
-      tags: ['sqlite', 'sync'],
-      orderIndex: 'a1',
-      onToggleComplete: () => {},
-    },
-    {
-      id: '3',
-      title: 'Test 120 FPS swipe gestures with tactile haptics',
-      completed: false,
-      priority: 1,
-      project: 'Mobile UX',
-      dueDate: '2026-08-28',
-      dueTime: '18:00:00',
-      estimatedMinutes: 20,
-      recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
-      tags: ['gestures', 'haptics'],
-      orderIndex: 'a2',
-      onToggleComplete: () => {},
-    },
-    {
-      id: '4',
-      title: 'Integrate client image compression (~350KB target)',
-      completed: false,
-      priority: 3,
-      project: 'Media Storage',
-      dueDate: '2026-08-29',
-      dueTime: null,
-      estimatedMinutes: 60,
-      tags: ['uploads'],
-      orderIndex: 'a3',
-      onToggleComplete: () => {},
-    },
-    {
-      id: '5',
-      title: 'Daily engineering sync and architecture review',
-      completed: false,
-      priority: 2,
-      project: 'Core Architecture',
-      dueDate: '2026-08-28',
-      dueTime: '09:00:00',
-      estimatedMinutes: 15,
-      recurrenceRule: 'FREQ=DAILY',
-      tags: ['sync', 'daily'],
-      orderIndex: 'a4',
-      onToggleComplete: () => {},
-    },
-  ]);
+  // Live Reactive Sections Query
+  const { data: rawSections = [] } = useQuery<SectionRow>(
+    `SELECT * FROM sections WHERE deleted_at IS NULL AND workspace_id = ? ORDER BY order_index ASC`,
+    [activeWorkspaceId]
+  );
 
-  const toggleTask = (id: string) => {
-    setTasks(prev => {
-      const target = prev.find(t => t.id === id);
-      if (!target) return prev;
+  // Live Reactive Workspace Members Query
+  const { data: rawMembers = [] } = useQuery<{ id: string; name: string; email: string; role: string }>(
+    `SELECT p.id, p.display_name as name, p.email, wm.role 
+     FROM workspace_members wm 
+     JOIN profiles p ON p.id = wm.user_id 
+     WHERE wm.workspace_id = ?`,
+    [activeWorkspaceId]
+  );
 
-      const isNowCompleted = !target.completed;
+  // ---------------------------------------------------------------------------
+  // MEMOIZED VIEW MODELS
+  // ---------------------------------------------------------------------------
 
-      // If completing a task that has a recurrence rule, spawn the next occurrence
-      if (isNowCompleted && target.recurrenceRule) {
-        const nextRecurrence = calculateNextRecurrence(
-          target.dueDate,
-          target.dueTime,
-          target.recurrenceRule
-        );
+  const projects: ProjectItem[] = useMemo(() => {
+    return rawProjects.map(p => ({
+      id: p.id,
+      name: p.name,
+      color: p.color || '#3B82F6',
+      taskCount: p.task_count || 0,
+    }));
+  }, [rawProjects]);
 
-        const nextTask: TaskItemProps = {
-          ...target,
-          id: Crypto.randomUUID(),
-          completed: false,
-          dueDate: nextRecurrence.nextDueDate,
-          dueTime: nextRecurrence.nextDueTime,
-          orderIndex: getOrderIndexBetween(prev[prev.length - 1]?.orderIndex, null),
-        };
+  const sections: KanbanSection[] = useMemo(() => {
+    if (rawSections.length === 0) {
+      return [
+        { id: 'sec-todo', name: 'To Do', orderIndex: 'a0' },
+        { id: 'sec-inprog', name: 'In Progress', orderIndex: 'a1' },
+        { id: 'sec-done', name: 'Done', orderIndex: 'a2' },
+      ];
+    }
+    return rawSections.map(s => ({
+      id: s.id,
+      name: s.name,
+      orderIndex: s.order_index,
+    }));
+  }, [rawSections]);
 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        return [
-          ...prev.map(t => t.id === id ? { ...t, completed: true } : t),
-          nextTask,
-        ];
+  const members: ProjectMember[] = useMemo(() => {
+    return rawMembers.map((m, i) => ({
+      id: m.id,
+      name: m.name || m.email?.split('@')[0] || 'Member',
+      email: m.email || '',
+      role: (m.role as any) || 'editor',
+      color: ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'][i % 5],
+      isOnline: true,
+    }));
+  }, [rawMembers]);
+
+  const tasks: (TaskItemProps & { description?: string | null; project_id?: string | null })[] = useMemo(() => {
+    return rawTasks.map(t => ({
+      id: t.id,
+      title: t.title,
+      description: t.description || null,
+      completed: !!t.completed_at || t.status === 'done',
+      priority: (t.priority || 4) as 1 | 2 | 3 | 4,
+      project: t.project_name || 'Inbox',
+      project_id: t.project_id || null,
+      dueDate: t.due_date || null,
+      dueTime: t.due_time || null,
+      estimatedMinutes: t.estimated_minutes || null,
+      recurrenceRule: t.recurrence_rule || null,
+      recurrence_rule: t.recurrence_rule || null,
+      assigned_to: t.assigned_to || null,
+      assignedTo: t.assigned_to ? {
+        id: t.assigned_to,
+        name: t.assigned_name || 'Assignee',
+        color: '#3B82F6',
+      } : null,
+      tags: [],
+      orderIndex: t.order_index,
+      section_id: t.section_id || null,
+      onToggleComplete: () => toggleTask(t.id),
+    }));
+  }, [rawTasks]);
+
+  const selectedTask = useMemo(() => {
+    if (!selectedTaskId) return null;
+    return tasks.find(t => t.id === selectedTaskId) || null;
+  }, [tasks, selectedTaskId]);
+
+  // ---------------------------------------------------------------------------
+  // LIVE DATABASE MUTATIONS
+  // ---------------------------------------------------------------------------
+
+  const toggleTask = async (id: string) => {
+    const target = rawTasks.find(t => t.id === id);
+    if (!target || !powersync || !activeWorkspaceId) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      await coreToggleTask(powersync, activeWorkspaceId, target);
+    } catch (err) {
+      console.error('Failed to toggle task:', err);
+    }
+  };
+
+  const handleAddTask = async (parsed: ParsedTaskInput, _attachment: CompressedAttachment | null) => {
+    if (!powersync || !activeWorkspaceId) return;
+
+    const lastIndex = rawTasks.length > 0 ? rawTasks[rawTasks.length - 1].order_index : null;
+    const newIndex = getOrderIndexBetween(lastIndex, null);
+
+    const targetProjectId = selectedProjectId || (projects[0]?.id) || '00000000-0000-0000-0000-000000000000';
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await createTask(powersync, activeWorkspaceId, {
+        title: parsed.title,
+        project_id: targetProjectId,
+        priority: parsed.priority || 4,
+        due_date: parsed.dueDate || null,
+        due_time: parsed.dueTime || null,
+        estimated_minutes: parsed.estimatedMinutes || null,
+        recurrence_rule: parsed.recurrenceRule || null,
+        order_index: newIndex,
+      });
+    } catch (err) {
+      console.error('Failed to add task:', err);
+    }
+  };
+
+  const handleUpdateTask = async (id: string, updates: any) => {
+    if (!powersync || !activeWorkspaceId) return;
+    try {
+      await updateTask(powersync, activeWorkspaceId, id, updates);
+    } catch (err) {
+      console.error('Failed to update task:', err);
+    }
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await coreDeleteTask(powersync, activeWorkspaceId, id);
+      if (selectedTaskId === id) {
+        setSelectedTaskId(null);
+        setDetailModalVisible(false);
       }
-
-      return prev.map(t => t.id === id ? { ...t, completed: isNowCompleted } : t);
-    });
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+    }
   };
 
-  const handleMoveTaskToSection = (taskId: string, targetSectionId: string | null) => {
-    setTasks(prev =>
-      prev.map(t => (t.id === taskId ? { ...t, section_id: targetSectionId } : t))
-    );
+  const handleCreateProject = async (name: string, color: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    const newIndex = getOrderIndexBetween(null, null);
+    try {
+      const newId = await createProject(powersync, activeWorkspaceId, {
+        name,
+        color,
+        order_index: newIndex,
+      });
+      setSelectedProjectId(newId);
+    } catch (err) {
+      console.error('Failed to create project:', err);
+    }
   };
 
-  const handleCreateSection = (name: string) => {
-    const newSec: KanbanSection = {
-      id: Crypto.randomUUID(),
-      name,
-      orderIndex: getOrderIndexBetween(sections[sections.length - 1]?.orderIndex, null),
-    };
-    setSections(prev => [...prev, newSec]);
+  const handleDeleteProject = async (id: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    try {
+      await coreDeleteProject(powersync, activeWorkspaceId, id);
+      if (selectedProjectId === id) setSelectedProjectId(null);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+    }
   };
 
-  const handleDeleteSection = (sectionId: string) => {
-    setSections(prev => prev.filter(s => s.id !== sectionId));
-    setTasks(prev =>
-      prev.map(t => (t.section_id === sectionId ? { ...t, section_id: null } : t))
-    );
+  const handleMoveTaskToSection = async (taskId: string, targetSectionId: string | null) => {
+    if (!powersync || !activeWorkspaceId) return;
+    try {
+      await updateTask(powersync, activeWorkspaceId, taskId, {
+        section_id: targetSectionId,
+      });
+    } catch (err) {
+      console.error('Failed to move task to section:', err);
+    }
   };
 
-  const handleRenameSection = (sectionId: string, newName: string) => {
-    setSections(prev =>
-      prev.map(s => (s.id === sectionId ? { ...s, name: newName } : s))
-    );
+  const handleCreateSection = async (name: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    const targetProjId = selectedProjectId || (projects[0]?.id) || '00000000-0000-0000-0000-000000000000';
+    const lastIndex = sections.length > 0 ? sections[sections.length - 1].orderIndex : null;
+    const newIndex = getOrderIndexBetween(lastIndex, null);
+    try {
+      await createSection(powersync, activeWorkspaceId, {
+        name,
+        project_id: targetProjId,
+        order_index: newIndex,
+      });
+    } catch (err) {
+      console.error('Failed to create section:', err);
+    }
   };
 
-  const handleReorderSection = (sectionId: string, direction: 'left' | 'right') => {
-    setSections(prev => {
-      const index = prev.findIndex(s => s.id === sectionId);
-      if (index === -1) return prev;
-      const targetIndex = direction === 'left' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+  const handleDeleteSection = async (sectionId: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE sections SET deleted_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`,
+        [now, now, sectionId, activeWorkspaceId]
+      );
+    } catch (err) {
+      console.error('Failed to delete section:', err);
+    }
+  };
 
-      const nextList = [...prev];
-      const temp = nextList[index];
-      nextList[index] = nextList[targetIndex];
-      nextList[targetIndex] = temp;
-      return nextList;
-    });
+  const handleRenameSection = async (sectionId: string, newName: string) => {
+    if (!powersync || !activeWorkspaceId) return;
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE sections SET name = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`,
+        [newName, now, sectionId, activeWorkspaceId]
+      );
+    } catch (err) {
+      console.error('Failed to rename section:', err);
+    }
+  };
+
+  const handleReorderSection = async (sectionId: string, direction: 'left' | 'right') => {
+    const index = sections.findIndex(s => s.id === sectionId);
+    if (index === -1 || !powersync || !activeWorkspaceId) return;
+    const targetIndex = direction === 'left' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sections.length) return;
+
+    const prevOrder = targetIndex > 0 ? sections[targetIndex - 1]?.orderIndex : null;
+    const nextOrder = targetIndex < sections.length - 1 ? sections[targetIndex + 1]?.orderIndex : null;
+    const newOrderIndex = getOrderIndexBetween(prevOrder, nextOrder);
+
+    const now = new Date().toISOString();
+    try {
+      await powersync.execute(
+        `UPDATE sections SET order_index = ?, updated_at = ? WHERE id = ? AND workspace_id = ?`,
+        [newOrderIndex, now, sectionId, activeWorkspaceId]
+      );
+    } catch (err) {
+      console.error('Failed to reorder section:', err);
+    }
   };
 
   const handleOpenDetail = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const target = tasks.find(t => t.id === id) || null;
-    setSelectedTask(target);
+    setSelectedTaskId(id);
     setDetailModalVisible(true);
   };
 
-  const handleUpdateTask = (id: string, updates: any) => {
-    setTasks(prev =>
-      prev.map(t => {
-        if (t.id === id) {
-          const matchingProj = projects.find(p => p.id === updates.project_id);
-          const matchingMember = members.find(m => m.id === updates.assigned_to);
-          return {
-            ...t,
-            ...updates,
-            project: matchingProj ? matchingProj.name : t.project,
-            assignedTo: updates.assigned_to !== undefined
-              ? (matchingMember ? { id: matchingMember.id, name: matchingMember.name, color: matchingMember.color } : null)
-              : t.assignedTo,
-          };
-        }
-        return t;
-      })
-    );
+  const handleInviteMember = (_email: string, _role: 'editor' | 'viewer') => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const handleInviteMember = (email: string, role: 'editor' | 'viewer') => {
-    const newMember: ProjectMember = {
-      id: Crypto.randomUUID(),
-      name: email.split('@')[0],
-      email,
-      role,
-      color: '#F59E0B',
-      isOnline: false,
-    };
-    setMembers(prev => [...prev, newMember]);
+  const handleRemoveMember = (_memberId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const handleRemoveMember = (memberId: string) => {
-    setMembers(prev => prev.filter(m => m.id !== memberId));
-  };
-
-  const handleChangeRole = (memberId: string, newRole: 'editor' | 'viewer') => {
-    setMembers(prev =>
-      prev.map(m => (m.id === memberId ? { ...m, role: newRole } : m))
-    );
-  };
-
-  const handleDeleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-  };
-
-  const handleCreateProject = (name: string, color: string) => {
-    const newProj: ProjectItem = {
-      id: Crypto.randomUUID(),
-      name,
-      color,
-      taskCount: 0,
-    };
-    setProjects(prev => [...prev, newProj]);
-    setSelectedProjectId(newProj.id);
-  };
-
-  const handleDeleteProject = (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    if (selectedProjectId === id) setSelectedProjectId(null);
-  };
-
-  const handleAddTask = (parsed: ParsedTaskInput, _attachment: CompressedAttachment | null) => {
-    const lastIndex = tasks.length > 0 ? tasks[tasks.length - 1].orderIndex : null;
-    const newIndex = getOrderIndexBetween(lastIndex, null);
-
-    const activeProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
-    const finalProjectName = parsed.projectName || (activeProject ? activeProject.name : 'Inbox');
-
-    const newTask: TaskItemProps = {
-      id: Crypto.randomUUID(),
-      title: parsed.title,
-      completed: false,
-      priority: parsed.priority,
-      project: finalProjectName,
-      dueDate: parsed.dueDate,
-      dueTime: parsed.dueTime,
-      estimatedMinutes: parsed.estimatedMinutes,
-      tags: parsed.tags,
-      orderIndex: newIndex,
-      onToggleComplete: () => {},
-    };
-
-    setTasks(prev => [...prev, newTask]);
+  const handleChangeRole = (_memberId: string, _newRole: 'editor' | 'viewer') => {
+    Haptics.selectionAsync();
   };
 
   const currentProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
-  const filteredTasks = currentProject ? tasks.filter(t => t.project === currentProject.name) : tasks;
+  const filteredTasks = currentProject ? tasks.filter(t => t.project_id === currentProject.id) : tasks;
   const activeCount = filteredTasks.filter(t => !t.completed).length;
 
   return (

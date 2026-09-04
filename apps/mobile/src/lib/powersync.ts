@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://hyrffgsjmobdffpgoalw.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_3KFP0qwqMPLz3IanQAYejA_VreUz38c';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -23,7 +23,7 @@ export const setupPowerSync = async (encryptionKey: string) => {
       database: {
         dbFilename: 'finished_tasks.db',
         encryptionKey: encryptionKey // Passes down to op-sqlite for SQLCipher
-      }
+      } as any
     });
   } catch (err) {
     // Fallback: initialize without encryption if encryptionKey config isn't supported yet
