@@ -1,24 +1,56 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Trash2, ArrowLeft, ShieldCheck, Globe, Layout, Calendar as CalendarIcon } from 'lucide-react';
+import { 
+  AlertTriangle, 
+  Trash2, 
+  ArrowLeft, 
+  ShieldCheck, 
+  Globe, 
+  Layout, 
+  Calendar as CalendarIcon,
+  Plus,
+  Edit2,
+  Check,
+  X
+} from 'lucide-react';
 import { supabase, powersync } from '../lib/powersync';
 import { useAuth } from '../hooks/useAuth';
 import { MfaSetupModal } from '../components/MfaSetupModal';
+import { CreateWorkspaceModal } from '../components/CreateWorkspaceModal';
+import { updateWorkspace, deleteWorkspace } from '@app/core';
 import { useQuery } from '@powersync/react';
 
 export function SettingsPage() {
   const navigate = useNavigate();
   const { user, hasMfa, signOut, mfaFactors, refreshAuth } = useAuth();
-  const [activeTab, setActiveTab] = useState<'account' | 'security' | 'preferences'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'workspaces' | 'security' | 'preferences'>('account');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
   const [mfaModalOpen, setMfaModalOpen] = useState(false);
+  const [isCreateWorkspaceModalOpen, setIsCreateWorkspaceModalOpen] = useState(false);
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
+  const [editingWorkspaceName, setEditingWorkspaceName] = useState('');
+  const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
 
   const { data: profiles = [] } = useQuery(`SELECT * FROM profiles WHERE id = ?`, [user?.id || '']);
   const profile = profiles[0] || {};
+
+  const { data: workspaces = [] } = useQuery<{
+    id: string;
+    name: string;
+    is_personal: number;
+    created_at: string;
+  }>(`SELECT * FROM workspaces WHERE deleted_at IS NULL ORDER BY is_personal DESC, name ASC`);
+
+  const { data: workspaceMembers = [] } = useQuery<{
+    id: string;
+    workspace_id: string;
+    role: string;
+    user_id: string;
+  }>(`SELECT * FROM workspace_members`);
 
   const handleUpdateProfile = async (field: string, value: string | number) => {
     if (!user?.id) return;
@@ -79,6 +111,12 @@ export function SettingsPage() {
             className={`px-3 py-2 rounded-lg text-sm font-medium text-left transition ${activeTab === 'account' ? 'bg-blue-600/10 text-blue-400' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'}`}
           >
             Account
+          </button>
+          <button
+            onClick={() => setActiveTab('workspaces')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium text-left transition ${activeTab === 'workspaces' ? 'bg-blue-600/10 text-blue-400' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'}`}
+          >
+            Workspaces
           </button>
           <button
             onClick={() => setActiveTab('security')}
@@ -179,6 +217,166 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'workspaces' && (
+              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-zinc-100 mb-1">Workspaces</h2>
+                    <p className="text-sm text-zinc-500">Manage your personal and collaborative workspaces.</p>
+                  </div>
+                  <button
+                    onClick={() => setIsCreateWorkspaceModalOpen(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shadow-lg shadow-blue-600/20"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>New Workspace</span>
+                  </button>
+                </div>
+
+                {workspaceActionError && (
+                  <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/50 text-xs text-red-400">
+                    {workspaceActionError}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {workspaces.map((ws) => {
+                    const membersCount = workspaceMembers.filter((m) => m.workspace_id === ws.id).length;
+                    const myMembership = workspaceMembers.find(
+                      (m) => m.workspace_id === ws.id && m.user_id === user?.id
+                    );
+                    const isOwner = myMembership?.role === 'owner';
+                    const isEditingThis = editingWorkspaceId === ws.id;
+
+                    return (
+                      <div
+                        key={ws.id}
+                        className="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between gap-4"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-600/20 shrink-0">
+                            {ws.name.charAt(0).toUpperCase()}
+                          </div>
+
+                          {isEditingThis ? (
+                            <div className="flex items-center gap-2 flex-1 max-w-sm">
+                              <input
+                                type="text"
+                                value={editingWorkspaceName}
+                                onChange={(e) => setEditingWorkspaceName(e.target.value)}
+                                autoFocus
+                                className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                              />
+                              <button
+                                onClick={async () => {
+                                  const trimmed = editingWorkspaceName.trim();
+                                  if (!trimmed) return;
+                                  try {
+                                    await updateWorkspace(powersync, ws.id, { name: trimmed });
+                                    setEditingWorkspaceId(null);
+                                  } catch (e: any) {
+                                    setWorkspaceActionError(e.message || 'Failed to rename workspace');
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
+                                title="Save"
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => setEditingWorkspaceId(null)}
+                                className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition"
+                                title="Cancel"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-zinc-100 truncate">{ws.name}</h3>
+                                <span
+                                  className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                    ws.is_personal === 1
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                  }`}
+                                >
+                                  {ws.is_personal === 1 ? 'Personal' : 'Team'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-2">
+                                <span>
+                                  Role: <strong className="text-zinc-400 capitalize">{myMembership?.role || 'Member'}</strong>
+                                </span>
+                                <span>•</span>
+                                <span>
+                                  {membersCount} {membersCount === 1 ? 'member' : 'members'}
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {!isEditingThis && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isOwner && (
+                              <button
+                                onClick={() => {
+                                  setEditingWorkspaceId(ws.id);
+                                  setEditingWorkspaceName(ws.name);
+                                }}
+                                className="p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
+                                title="Rename Workspace"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+
+                            {isOwner && workspaces.length > 1 && (
+                              <button
+                                onClick={async () => {
+                                  if (
+                                    !window.confirm(
+                                      `Are you sure you want to delete "${ws.name}"? All associated tasks will be removed.`
+                                    )
+                                  )
+                                    return;
+                                  try {
+                                    await deleteWorkspace(powersync, ws.id);
+                                  } catch (e: any) {
+                                    setWorkspaceActionError(e.message || 'Failed to delete workspace');
+                                  }
+                                }}
+                                className="p-2 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition"
+                                title="Delete Workspace"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <CreateWorkspaceModal
+                  isOpen={isCreateWorkspaceModalOpen}
+                  onClose={() => setIsCreateWorkspaceModalOpen(false)}
+                  onCreated={async (newId) => {
+                    try {
+                      await supabase.auth.updateUser({
+                        data: { active_workspace_id: newId },
+                      });
+                    } catch (e) {
+                      console.warn('Could not update active_workspace_id:', e);
+                    }
+                  }}
+                />
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/powersync';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   parseQuickAdd, 
   getOrderIndexBetween, 
@@ -49,6 +49,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -66,6 +67,10 @@ import { WeeklyReviewModal } from '../components/WeeklyReviewModal';
 import { KanbanBoardView } from '../components/KanbanBoardView';
 import { HabitsTrackerView } from '../components/HabitsTrackerView';
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher';
+import { UpgradePromptModal } from '../components/UpgradePromptModal';
+import { DowngradeGraceBanner } from '../components/DowngradeGraceBanner';
+import { EmergencyWrapUpBanner } from '../components/EmergencyWrapUpBanner';
+import { DownsizingWizardModal } from '../components/DownsizingWizardModal';
 
 export interface ViewTask {
   id: string;
@@ -96,7 +101,20 @@ export interface ViewTask {
 export function Workspace() {
   const navigate = useNavigate();
   const powersync = usePowerSync();
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const { user, signOut, refreshAuth } = useAuth();
+  
+  // Initialize from session to avoid resetting to default on reload
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => {
+    return user?.user_metadata?.active_workspace_id || null;
+  });
+
+  // Sync state if user loads later
+  useEffect(() => {
+    if (!activeWorkspaceId && user?.user_metadata?.active_workspace_id) {
+      setActiveWorkspaceId(user.user_metadata.active_workspace_id);
+    }
+  }, [user]);
+
   const [activeTab, setActiveTab] = useState<'today' | 'all' | 'calendar' | 'matrix' | 'analytics' | 'focus' | 'habits'>('today');
   const [showCompleted, setShowCompleted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -121,8 +139,95 @@ export function Workspace() {
   const [activeCommentTask, setActiveCommentTask] = useState<ViewTask | null>(null);
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null);
 
-  // Live Supabase Auth & Session Hook
-  const { user, signOut, refreshAuth } = useAuth();
+  const handleSwitchWorkspace = async (id: string) => {
+    if (activeWorkspaceId === id) return; // Prevent redundant updates
+    setActiveWorkspaceId(id);
+    setSelectedProjectId(null);
+    setSelectedFilterId(null);
+    try {
+      if (user?.user_metadata?.active_workspace_id !== id) {
+        await supabase.auth.updateUser({
+          data: { active_workspace_id: id }
+        });
+      }
+    } catch (e) {
+      console.warn('Could not update active_workspace_id in auth metadata:', e);
+    }
+  };
+
+  // User Entitlement & Tier Governance State
+  const [userProfile, setUserProfile] = useState<{
+    entitlement_tier: 'free' | 'pro';
+    is_early_adopter: boolean;
+    is_vip: boolean;
+    grandfathered_limits: any;
+    vip_custom_perks: any;
+  } | null>(null);
+  const [tierConfigs, setTierConfigs] = useState<Record<string, any>>({});
+  const [workspaceData, setWorkspaceData] = useState<any>(null);
+  const [userWorkspaces, setUserWorkspaces] = useState<any[]>([]);
+  const [workspaceProjects, setWorkspaceProjects] = useState<any[]>([]);
+  const [workspaceMembersList, setWorkspaceMembersList] = useState<any[]>([]);
+  const [upgradeModalFeature, setUpgradeModalFeature] = useState<{ name: string; desc: string } | null>(null);
+
+  const fetchEntitlements = useCallback(async () => {
+    if (!user) return;
+    try {
+      const [pRes, tcRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('tier_configurations').select('*'),
+      ]);
+
+      if (pRes.data) setUserProfile(pRes.data);
+      if (tcRes.data) {
+        const map: Record<string, any> = {};
+        tcRes.data.forEach((r: any) => { map[r.tier] = r; });
+        setTierConfigs(map);
+      }
+    } catch (err) {
+      console.error('Failed to fetch entitlements:', err);
+    }
+  }, [user]);
+
+  const fetchWorkspaceMeta = useCallback(async () => {
+    if (!activeWorkspaceId || !user) return;
+    try {
+      const [wsRes, allWsRes, projRes, memRes] = await Promise.all([
+        supabase.from('workspaces').select('*').eq('id', activeWorkspaceId).single(),
+        supabase.from('workspaces').select('id, name').is('deleted_at', null),
+        supabase.from('projects').select('id, name, color').eq('workspace_id', activeWorkspaceId).eq('is_archived', false).is('deleted_at', null),
+        supabase.from('workspace_members').select('id, user_id, role').eq('workspace_id', activeWorkspaceId),
+      ]);
+
+      if (wsRes.data) setWorkspaceData(wsRes.data);
+      if (allWsRes.data) setUserWorkspaces(allWsRes.data);
+      if (projRes.data) setWorkspaceProjects(projRes.data);
+      if (memRes.data) setWorkspaceMembersList(memRes.data);
+    } catch (err) {
+      console.error('Failed to fetch workspace metadata:', err);
+    }
+  }, [activeWorkspaceId, user]);
+
+  useEffect(() => {
+    fetchEntitlements();
+  }, [fetchEntitlements]);
+
+  useEffect(() => {
+    fetchWorkspaceMeta();
+  }, [fetchWorkspaceMeta]);
+
+  const isPro = userProfile?.entitlement_tier === 'pro';
+  const effectiveLimits = userProfile?.is_vip
+    ? userProfile.vip_custom_perks
+    : (userProfile?.is_early_adopter && userProfile?.grandfathered_limits)
+    ? userProfile.grandfathered_limits
+    : tierConfigs['free'] || {};
+
+  const hasTimeBlocking = isPro || !!effectiveLimits.has_time_blocking;
+  const hasEisenhowerMatrix = isPro || !!effectiveLimits.has_eisenhower_matrix;
+  const hasFocusEngine = isPro || (effectiveLimits.has_focus_engine ?? true);
+  const hasDailyHabits = isPro || (effectiveLimits.has_daily_habits ?? true);
+  const hasStats = isPro || (effectiveLimits.has_workspace_aggregate_stats ?? true);
 
   // Live Reactive SQLite Saved Filters Query (Including deleted ones for tombstones)
   const { data: rawAllSavedFilters = [] } = useQuery<any>(
@@ -660,61 +765,19 @@ export function Workspace() {
           {user && (
             <WorkspaceSwitcher 
               activeWorkspaceId={activeWorkspaceId} 
-              onSwitch={setActiveWorkspaceId} 
+              onSwitch={handleSwitchWorkspace} 
+              isPro={isPro}
+              maxWorkspaces={isPro ? (tierConfigs['pro']?.max_workspaces ?? 3) : (effectiveLimits?.max_workspaces ?? 1)}
+              onOpenUpgrade={() => {
+                setUpgradeModalFeature({
+                  name: 'Multiple Workspaces',
+                  desc: 'Free accounts include 1 workspace. Upgrade to Pro to create and manage up to 3 separate workspaces for work, personal, and side projects.',
+                });
+              }}
             />
           )}
         </div>
 
-        {/* User Account / Guest Badge */}
-        {user ? (
-          <div className="px-2.5 py-2.5 mb-3 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col gap-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 pr-2">
-                <p className="font-semibold text-zinc-200 truncate">
-                  {user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'}
-                </p>
-                <p className="text-[10px] text-zinc-500 font-mono truncate">{user.email}</p>
-              </div>
-              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">
-                PRO
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between pt-1.5 border-t border-zinc-900 text-[11px]">
-              <button
-                onClick={() => navigate('/app/settings')}
-                title="Settings"
-                className="text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1"
-              >
-                <Settings className="h-5 w-5" />
-              </button>
-              
-              <button
-                onClick={signOut}
-
-                title="Sign Out"
-                className="text-zinc-500 hover:text-red-400 transition flex items-center gap-1"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="px-3 py-2.5 mb-3 rounded-xl bg-zinc-950/80 border border-dashed border-zinc-800 flex flex-col gap-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-zinc-400">Guest Mode (Local)</span>
-              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                Offline
-              </span>
-            </div>
-            <button
-              onClick={() => setAuthModalOpen(true)}
-              className="w-full py-1 px-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[11px] font-medium transition text-center"
-            >
-              Sign In to Cloud Sync
-            </button>
-          </div>
-        )}
 
         <nav className="space-y-1 flex-1 text-sm font-medium overflow-y-auto pr-1">
           <button
@@ -750,9 +813,22 @@ export function Workspace() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('calendar'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            onClick={() => {
+              if (!hasTimeBlocking) {
+                setUpgradeModalFeature({
+                  name: 'Time-Blocking (Calendar Grid)',
+                  desc: 'Visually schedule tasks, drag time-blocks, and prevent over-commitment with the calendar grid.',
+                });
+                return;
+              }
+              setActiveTab('calendar');
+              setSelectedProjectId(null);
+              setSelectedFilterId(null);
+            }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'calendar'
+              !hasTimeBlocking
+                ? 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                : activeTab === 'calendar'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -760,15 +836,34 @@ export function Workspace() {
             <span className="flex items-center gap-2">
               <Calendar className="h-4 w-4" /> Time-Blocking
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
-              Grid
-            </span>
+            {!hasTimeBlocking ? (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 flex items-center gap-1 border border-zinc-800">
+                <Lock className="h-2.5 w-2.5" /> PRO
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                Grid
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => { setActiveTab('matrix'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            onClick={() => {
+              if (!hasEisenhowerMatrix) {
+                setUpgradeModalFeature({
+                  name: 'Eisenhower Matrix',
+                  desc: 'Prioritize tasks by urgency and importance in a dynamic 2×2 decision matrix.',
+                });
+                return;
+              }
+              setActiveTab('matrix');
+              setSelectedProjectId(null);
+              setSelectedFilterId(null);
+            }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'matrix'
+              !hasEisenhowerMatrix
+                ? 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                : activeTab === 'matrix'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -776,15 +871,34 @@ export function Workspace() {
             <span className="flex items-center gap-2">
               <Grid className="h-4 w-4" /> Eisenhower Matrix
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
-              2×2
-            </span>
+            {!hasEisenhowerMatrix ? (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 flex items-center gap-1 border border-zinc-800">
+                <Lock className="h-2.5 w-2.5" /> PRO
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                2×2
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => { setActiveTab('focus'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            onClick={() => {
+              if (!hasFocusEngine) {
+                setUpgradeModalFeature({
+                  name: 'Focus Engine',
+                  desc: 'Stay in flow with the built-in Pomodoro timer and focus analytics.',
+                });
+                return;
+              }
+              setActiveTab('focus');
+              setSelectedProjectId(null);
+              setSelectedFilterId(null);
+            }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'focus'
+              !hasFocusEngine
+                ? 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                : activeTab === 'focus'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -792,15 +906,34 @@ export function Workspace() {
             <span className="flex items-center gap-2">
               <Timer className="h-4 w-4" /> Focus Engine
             </span>
-            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
-              25m
-            </span>
+            {!hasFocusEngine ? (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 flex items-center gap-1 border border-zinc-800">
+                <Lock className="h-2.5 w-2.5" /> PRO
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
+                25m
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => { setActiveTab('habits'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            onClick={() => {
+              if (!hasDailyHabits) {
+                setUpgradeModalFeature({
+                  name: 'Daily Habits Tracker',
+                  desc: 'Build consistency with daily habit streaks and streak flame counters.',
+                });
+                return;
+              }
+              setActiveTab('habits');
+              setSelectedProjectId(null);
+              setSelectedFilterId(null);
+            }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'habits'
+              !hasDailyHabits
+                ? 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                : activeTab === 'habits'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -808,12 +941,30 @@ export function Workspace() {
             <span className="flex items-center gap-2">
               <Flame className="h-4 w-4 text-orange-400" /> Daily Habits
             </span>
+            {!hasDailyHabits && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 flex items-center gap-1 border border-zinc-800">
+                <Lock className="h-2.5 w-2.5" /> PRO
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => { setActiveTab('analytics'); setSelectedProjectId(null); setSelectedFilterId(null); }}
+            onClick={() => {
+              if (!hasStats) {
+                setUpgradeModalFeature({
+                  name: 'Productivity Stats',
+                  desc: 'Analyze completion trends, weekly velocity, and team workload distribution.',
+                });
+                return;
+              }
+              setActiveTab('analytics');
+              setSelectedProjectId(null);
+              setSelectedFilterId(null);
+            }}
             className={`w-full px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
-              activeTab === 'analytics'
+              !hasStats
+                ? 'text-zinc-500 hover:bg-zinc-800/40 hover:text-zinc-300'
+                : activeTab === 'analytics'
                 ? 'bg-blue-600/15 text-blue-400 border border-blue-500/20'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
             }`}
@@ -821,6 +972,11 @@ export function Workspace() {
             <span className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4" /> Productivity Stats
             </span>
+            {!hasStats && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-850 text-zinc-400 flex items-center gap-1 border border-zinc-800">
+                <Lock className="h-2.5 w-2.5" /> PRO
+              </span>
+            )}
           </button>
 
 
@@ -832,7 +988,19 @@ export function Workspace() {
             <div className="flex items-center justify-between px-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider font-mono">
               <span>Projects</span>
               <button
-                onClick={() => { setEditingProject(null); setProjectModalOpen(true); }}
+                onClick={() => {
+                  const activeProjCount = rawProjects.filter(p => !p.deleted_at).length;
+                  const maxAllowedProjects = effectiveLimits?.max_projects_per_workspace ?? 1;
+                  if (!isPro && maxAllowedProjects !== -1 && activeProjCount >= maxAllowedProjects) {
+                    setUpgradeModalFeature({
+                      name: 'Unlimited Projects',
+                      desc: `You have reached the Free plan limit of ${maxAllowedProjects} project. Upgrade to Pro to create unlimited projects.`,
+                    });
+                    return;
+                  }
+                  setEditingProject(null);
+                  setProjectModalOpen(true);
+                }}
                 title="Create Project"
                 className="hover:text-blue-400 p-0.5 rounded hover:bg-zinc-800 transition"
               >
@@ -848,16 +1016,18 @@ export function Workspace() {
                       ? 'bg-blue-600/15 text-blue-300 font-semibold border border-blue-500/20'
                       : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
                   }`}
-                  onClick={() => {
-                    setSelectedProjectId(project.id);
-                    setSelectedFilterId(null);
-                    setActiveTab('today');
-                  }}
                 >
-                  <span className="flex items-center gap-2 truncate">
+                  <div
+                    onClick={() => {
+                      setSelectedProjectId(project.id);
+                      setSelectedFilterId(null);
+                      setActiveTab('today');
+                    }}
+                    className="flex items-center gap-2 truncate flex-1 min-w-0"
+                  >
                     <span style={{ backgroundColor: project.color || '#3B82F6' }} className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" />
                     <span className="truncate">{project.name}</span>
-                  </span>
+                  </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 font-semibold">
                       {project.task_count || 0}
@@ -887,7 +1057,18 @@ export function Workspace() {
             <div className="flex items-center justify-between px-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider font-mono">
               <span>Saved Filters</span>
               <button
-                onClick={() => setFilterModalOpen(true)}
+                onClick={() => {
+                  const activeFilterCount = rawAllSavedFilters.filter((f: any) => !f.deleted_at).length;
+                  const maxAllowedFilters = effectiveLimits?.max_saved_filters ?? 1;
+                  if (!isPro && maxAllowedFilters !== -1 && activeFilterCount >= maxAllowedFilters) {
+                    setUpgradeModalFeature({
+                      name: 'Unlimited Saved Filters',
+                      desc: `You have reached the Free plan limit of ${maxAllowedFilters} saved filter. Upgrade to Pro for unlimited smart filters.`,
+                    });
+                    return;
+                  }
+                  setFilterModalOpen(true);
+                }}
                 title="Create Smart Filter"
                 className="hover:text-blue-400 transition"
               >
@@ -945,6 +1126,70 @@ export function Workspace() {
           </div>
         </nav>
 
+        {/* User Account / Guest Badge */}
+        {user ? (
+          <div className="px-2.5 py-2.5 mt-auto shrink-0 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col gap-2 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 pr-2">
+                <p className="font-semibold text-zinc-200 truncate">
+                  {user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'}
+                </p>
+                <p className="text-[10px] text-zinc-500 font-mono truncate">{user.email}</p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {userProfile?.is_early_adopter && (
+                  <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    ⭐ EARLY
+                  </span>
+                )}
+                {userProfile?.is_vip && (
+                  <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    👑 VIP
+                  </span>
+                )}
+                <span className={`text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border ${
+                  isPro ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-850 text-zinc-300 border-zinc-700'
+                }`}>
+                  {userProfile?.entitlement_tier?.toUpperCase() || 'FREE'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1.5 border-t border-zinc-900 text-[11px]">
+              <button
+                onClick={() => navigate('/app/settings')}
+                title="Settings"
+                className="text-zinc-500 hover:text-zinc-300 transition flex items-center gap-1"
+              >
+                <Settings className="h-5 w-5" />
+              </button>
+              
+              <button
+                onClick={signOut}
+
+                title="Sign Out"
+                className="text-zinc-500 hover:text-red-400 transition flex items-center gap-1"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-3 py-2.5 mt-auto shrink-0 rounded-xl bg-zinc-950/80 border border-dashed border-zinc-800 flex flex-col gap-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-zinc-400">Guest Mode (Local)</span>
+              <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                Offline
+              </span>
+            </div>
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className="w-full py-1 px-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-[11px] font-medium transition text-center"
+            >
+              Sign In to Cloud Sync
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Main Content Area */}
@@ -960,6 +1205,27 @@ export function Workspace() {
           <div className="font-semibold text-sm text-zinc-100">It Is Finished</div>
           <div className="w-9" /> {/* spacer for center alignment */}
         </div>
+
+        {/* Downgrade Grace Countdown Banner */}
+        {workspaceData?.downgrade_status === 'in_grace_period' && (
+          <DowngradeGraceBanner
+            expiresAt={workspaceData.downgrade_grace_expires_at}
+            onUpgrade={() =>
+              setUpgradeModalFeature({
+                name: 'Pro Tier',
+                desc: 'Restore unlimited projects, workspaces, and collaborators to keep your team running.',
+              })
+            }
+          />
+        )}
+
+        {/* 15-Minute Emergency Wrap-Up Banner */}
+        {workspaceData?.downgrade_status === 'emergency_wrap_up' && (
+          <EmergencyWrapUpBanner
+            expiresAt={workspaceData.downgrade_emergency_expires_at}
+            onExpire={fetchWorkspaceMeta}
+          />
+        )}
                 {activeTab === 'calendar' ? (
           <CalendarTimeGrid onTaskClick={(id: string) => setSelectedTaskId(id)} members={workspaceMembers} />
         ) : activeTab === 'matrix' ? (
@@ -1396,6 +1662,36 @@ export function Workspace() {
           taskId={activeCommentTask.id}
         />
       )}
+
+      {/* Downsizing Wizard Modal (Mandatory gauntlet when grace ends) */}
+      <DownsizingWizardModal
+        isOpen={workspaceData?.downgrade_status === 'resolution_required'}
+        activeWorkspaceId={activeWorkspaceId || ''}
+        workspaces={userWorkspaces}
+        projects={workspaceProjects}
+        members={workspaceMembersList}
+        emergencyUsed={!!workspaceData?.downgrade_emergency_used}
+        onSuccess={fetchWorkspaceMeta}
+        onStartEmergencyPass={fetchWorkspaceMeta}
+        onUpgrade={() =>
+          setUpgradeModalFeature({
+            name: 'Pro Tier',
+            desc: 'Restore unlimited projects, workspaces, and collaborators.',
+          })
+        }
+      />
+
+      {/* Feature Gating Upgrade Prompt Modal */}
+      <UpgradePromptModal
+        isOpen={!!upgradeModalFeature}
+        onClose={() => setUpgradeModalFeature(null)}
+        featureName={upgradeModalFeature?.name || ''}
+        featureDescription={upgradeModalFeature?.desc}
+        onUpgrade={() => {
+          alert('Redirecting to Stripe checkout to upgrade to Pro...');
+          setUpgradeModalFeature(null);
+        }}
+      />
     </div>
   );
 }

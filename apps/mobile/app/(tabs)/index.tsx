@@ -15,6 +15,7 @@ import { ProjectPickerModal, type ProjectItem } from '../../src/components/Proje
 import { ProjectMembersModal, type ProjectMember } from '../../src/components/ProjectMembersModal';
 import { KanbanBoardView, type KanbanSection } from '../../src/components/KanbanBoardView';
 import { WeeklyReviewModal } from '../../src/components/WeeklyReviewModal';
+import { WorkspacePickerModal, type WorkspaceItem } from '../../src/components/WorkspacePickerModal';
 import { 
   getOrderIndexBetween, 
   type ParsedTaskInput,
@@ -25,12 +26,14 @@ import {
   createProject,
   deleteProject as coreDeleteProject,
   createSection,
+  createWorkspace,
   type TaskRow,
   type ProjectRow,
   type SectionRow
 } from '@app/core';
 import { usePowerSync, useQuery } from '@powersync/react';
 import { useWorkspace } from '../../src/lib/WorkspaceContext';
+import { supabase } from '../../src/lib/powersync';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Crypto from 'expo-crypto';
@@ -40,8 +43,9 @@ import { type CompressedAttachment } from '../../src/lib/imageCompressor';
 export default function TodayScreen() {
   const router = useRouter();
   const powersync = usePowerSync();
-  const { activeWorkspaceId } = useWorkspace();
+  const { activeWorkspaceId, switchWorkspace } = useWorkspace();
 
+  const [workspacePickerVisible, setWorkspacePickerVisible] = useState(false);
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
   const [membersModalVisible, setMembersModalVisible] = useState(false);
@@ -54,6 +58,24 @@ export default function TodayScreen() {
   // ---------------------------------------------------------------------------
   // LIVE POWERSYNC SQLITE QUERIES
   // ---------------------------------------------------------------------------
+
+  // Live Reactive Workspaces Query
+  const { data: rawWorkspaces = [] } = useQuery<WorkspaceItem>(
+    `SELECT id, name, is_personal FROM workspaces WHERE deleted_at IS NULL ORDER BY is_personal DESC, name ASC`
+  );
+  const activeWorkspace = rawWorkspaces.find(w => w.id === activeWorkspaceId);
+
+  const handleCreateWorkspace = async (name: string, isPersonal: boolean) => {
+    if (!powersync) return;
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData?.user?.id) return;
+
+    const newId = await createWorkspace(powersync, authData.user.id, {
+      name,
+      is_personal: isPersonal
+    });
+    await switchWorkspace(newId);
+  };
 
   // Live Reactive Tasks Query
   const { data: rawTasks = [] } = useQuery<TaskRow & { 
@@ -372,12 +394,23 @@ export default function TodayScreen() {
               <Ionicons name="chevron-down" size={16} color="#71717A" />
             </View>
             <Text style={styles.headerSubtitle}>
-              {activeCount} tasks remaining • 0ms Local SQLite
+              {activeWorkspace?.name ? `${activeWorkspace.name} • ` : ''}{activeCount} tasks remaining • 0ms Local SQLite
             </Text>
           </TouchableOpacity>
 
           {/* Top Right Action Controls */}
           <View style={styles.headerRightActions}>
+            {/* Workspace Selector Trigger */}
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setWorkspacePickerVisible(true);
+              }}
+              style={styles.workspaceBtn}
+            >
+              <Ionicons name="briefcase-outline" size={16} color="#60A5FA" />
+            </TouchableOpacity>
+
             {/* Team Collaboration Trigger */}
             <TouchableOpacity
               onPress={() => {
@@ -530,6 +563,16 @@ export default function TodayScreen() {
           onCreateProject={handleCreateProject}
           onDeleteProject={handleDeleteProject}
         />
+
+        {/* Workspace Picker Modal */}
+        <WorkspacePickerModal
+          visible={workspacePickerVisible}
+          onClose={() => setWorkspacePickerVisible(false)}
+          workspaces={rawWorkspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={(id) => switchWorkspace(id)}
+          onCreateWorkspace={handleCreateWorkspace}
+        />
       </View>
     </SafeAreaView>
   );
@@ -582,6 +625,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  workspaceBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E3A8A25',
+    borderWidth: 1,
+    borderColor: '#3B82F640',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   teamBtn: {
     width: 32,

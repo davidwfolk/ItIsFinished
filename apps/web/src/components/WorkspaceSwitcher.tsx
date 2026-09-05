@@ -1,15 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, usePowerSync } from '@powersync/react';
 import { supabase } from '../lib/powersync';
-import { ChevronDown, Briefcase, User as UserIcon, Check } from 'lucide-react';
+import { ChevronDown, Briefcase, User as UserIcon, Check, Plus } from 'lucide-react';
+import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 
 interface WorkspaceSwitcherProps {
   activeWorkspaceId: string | null;
   onSwitch: (id: string) => void;
+  isPro?: boolean;
+  maxWorkspaces?: number;
+  onOpenUpgrade?: () => void;
+  onOpenCreateWorkspace?: () => void;
 }
 
-export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({
+  activeWorkspaceId,
+  onSwitch,
+  isPro = false,
+  maxWorkspaces = 1,
+  onOpenUpgrade,
+  onOpenCreateWorkspace,
+}: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const powersync = usePowerSync();
 
@@ -105,37 +118,79 @@ export function WorkspaceSwitcher({ activeWorkspaceId, onSwitch }: WorkspaceSwit
 
       {isOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 p-1 rounded-xl bg-zinc-900 border border-zinc-800 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
-          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-            Workspaces
-          </div>
-          {workspaces.map((w) => (
-            <button
-              key={w.id}
-              onClick={() => {
-                onSwitch(w.id);
-                setIsOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-2 py-2 rounded-lg text-sm transition-colors ${
-                activeWorkspaceId === w.id 
-                  ? 'bg-blue-500/10 text-blue-400' 
-                  : 'hover:bg-zinc-800 text-zinc-300'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {w.is_personal === 1 ? (
-                  <UserIcon className="h-4 w-4 opacity-70" />
-                ) : (
-                  <Briefcase className="h-4 w-4 opacity-70" />
-                )}
-                <span className="truncate">{w.name}</span>
-              </div>
-              {activeWorkspaceId === w.id && (
-                <Check className="h-4 w-4 text-blue-500" />
+          <div className="px-2 py-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <span>Workspaces</span>
+            <div className="flex items-center gap-1.5 font-mono">
+              {isPro && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-sans font-bold">
+                  PRO
+                </span>
               )}
+              <span className="text-zinc-400">
+                {workspaces.length} / {maxWorkspaces === -1 || maxWorkspaces >= 999 ? '∞' : maxWorkspaces}
+              </span>
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {workspaces.map((w) => (
+              <button
+                key={w.id}
+                onClick={() => {
+                  onSwitch(w.id);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2 py-2 rounded-lg text-sm transition-colors ${
+                  activeWorkspaceId === w.id 
+                    ? 'bg-blue-500/10 text-blue-400' 
+                    : 'hover:bg-zinc-800 text-zinc-300'
+                }`}
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                  {w.is_personal === 1 ? (
+                    <UserIcon className="h-4 w-4 opacity-70 shrink-0" />
+                  ) : (
+                    <Briefcase className="h-4 w-4 opacity-70 shrink-0" />
+                  )}
+                  <span className="truncate">{w.name}</span>
+                </div>
+                {activeWorkspaceId === w.id && (
+                  <Check className="h-4 w-4 text-blue-500 shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-1 mt-1 border-t border-zinc-800/80">
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                const limit = maxWorkspaces ?? 1;
+                const isAtLimit = limit !== -1 && limit < 999 && workspaces.length >= limit;
+                if (isAtLimit) {
+                  onOpenUpgrade?.();
+                } else if (onOpenCreateWorkspace) {
+                  onOpenCreateWorkspace();
+                } else {
+                  setIsCreateModalOpen(true);
+                }
+              }}
+              className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-xs font-semibold text-blue-400 hover:bg-blue-600/10 hover:text-blue-300 transition"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Add Workspace</span>
             </button>
-          ))}
+          </div>
         </div>
       )}
+
+      <CreateWorkspaceModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreated={(newId) => {
+          onSwitch(newId);
+        }}
+      />
     </div>
   );
 }

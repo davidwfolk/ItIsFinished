@@ -61,7 +61,13 @@ export class SupabasePowerSyncConnector implements PowerSyncBackendConnector {
             const { error } = await this.supabase
               .from(table)
               .upsert(data);
-            if (error) throw new Error(`Supabase Upsert Failed on ${table}: ${error.message}`);
+            if (error) {
+              if (error.code === 'QZ001' || error.code === '23503') {
+                console.warn(`[PowerSync] Dropping invalid PUT on ${table}: ${error.message} (Code: ${error.code})`);
+              } else {
+                throw new Error(`Supabase Upsert Failed on ${table}: ${error.message}`);
+              }
+            }
             break;
           }
 
@@ -70,7 +76,13 @@ export class SupabasePowerSyncConnector implements PowerSyncBackendConnector {
               .from(table)
               .update(data)
               .eq('id', op.id);
-            if (error) throw new Error(`Supabase Update Failed on ${table}: ${error.message}`);
+            if (error) {
+              if (error.code === 'QZ001' || error.code === '23503') {
+                console.warn(`[PowerSync] Dropping invalid PATCH on ${table}: ${error.message} (Code: ${error.code})`);
+              } else {
+                throw new Error(`Supabase Update Failed on ${table}: ${error.message}`);
+              }
+            }
             break;
           }
 

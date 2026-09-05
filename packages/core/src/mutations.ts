@@ -63,6 +63,16 @@ export const CreateSectionSchema = z.object({
   order_index: z.string()
 });
 
+export const CreateWorkspaceSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'Workspace name is required').max(100, 'Workspace name is too long'),
+  is_personal: z.boolean().default(false)
+});
+
+export const UpdateWorkspaceSchema = z.object({
+  name: z.string().trim().min(1, 'Workspace name is required').max(100, 'Workspace name is too long').optional(),
+});
+
 // ----------------------------------------------------------------------------
 // PURE MUTATION FUNCTIONS (DEPENDENCY INJECTION)
 // ----------------------------------------------------------------------------
@@ -257,3 +267,63 @@ export async function createTimeBlock(
   );
   return id;
 }
+
+// ----------------------------------------------------------------------------
+// WORKSPACE MUTATIONS
+// ----------------------------------------------------------------------------
+
+export async function createWorkspace(
+  db: AbstractPowerSyncDatabase,
+  userId: string,
+  input: z.infer<typeof CreateWorkspaceSchema>
+) {
+  const id = input.id || crypto.randomUUID();
+  const memberId = crypto.randomUUID();
+  const data = CreateWorkspaceSchema.parse({ ...input, id });
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `INSERT INTO workspaces (id, name, is_personal, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [data.id, data.name, data.is_personal ? 1 : 0, now, now]
+  );
+
+  await db.execute(
+    `INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at, updated_at)
+     VALUES (?, ?, ?, 'owner', ?, ?)`,
+    [memberId, id, userId, now, now]
+  );
+
+  return id;
+}
+
+export async function updateWorkspace(
+  db: AbstractPowerSyncDatabase,
+  workspaceId: string,
+  updates: z.infer<typeof UpdateWorkspaceSchema>
+) {
+  const data = UpdateWorkspaceSchema.parse(updates);
+  const keys = Object.keys(data);
+  if (keys.length === 0) return;
+
+  const setClauses = keys.map(k => `${k} = ?`).join(', ');
+  const values = keys.map(k => (data as any)[k]);
+  const now = new Date().toISOString();
+
+  await db.execute(
+    `UPDATE workspaces SET ${setClauses}, updated_at = ? WHERE id = ?`,
+    [...values, now, workspaceId]
+  );
+}
+
+export async function deleteWorkspace(
+  db: AbstractPowerSyncDatabase,
+  workspaceId: string
+) {
+  const now = new Date().toISOString();
+  await db.execute(
+    `UPDATE workspaces SET deleted_at = ?, updated_at = ? WHERE id = ?`,
+    [now, now, workspaceId]
+  );
+}
+

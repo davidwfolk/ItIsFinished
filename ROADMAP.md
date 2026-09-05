@@ -24,10 +24,19 @@ This document serves as the permanent, living roadmap for the **It Is Finished**
 - [ ] **Analytics Deep-Dive:** Upgrade the Productivity Stats view into a comprehensive tabbed system to explore historical task data.
 - [ ] **Kanban vs. Tasks Architecture:** Standardize drag-and-drop logic between the board and list views.
 
-## 🔜 Stage 4: Monetization (RevenueCat)
-- [ ] **RevenueCat Integration:** Setup RevenueCat SDK for handling cross-platform subscriptions.
-- [ ] **Paywalls:** Build the upgrade UI for free users.
-- [ ] **Pro-Tier Feature Locking:** Lock specific advanced features (e.g., unlimited projects, advanced analytics) behind the subscription state.
+## 🔜 Stage 4: Monetization & Entitlements (The 4-Tier Workspace Model)
+- [ ] **Tier Structure & Workspace Allocation Architecture:**
+  * **Free:** 1 shared workspace, basic task & project features.
+  * **Pro:** Up to 3 workspaces, advanced productivity features (filters, custom tags, deep analytics).
+  * **Business:** Up to 15 workspaces, centralized team management, seat controls, and advanced features.
+  * **Enterprise:** Custom workspace allocation, tailored enterprise setup, dedicated governance, and advanced features.
+- [ ] **Dynamic Free vs. Pro UI & Feature Gating:**
+  - Replace the hardcoded static `PRO` badge in the customer web app sidebar (`Workspace.tsx:679`) with the dynamic `profiles.entitlement_tier` synced from Supabase/PowerSync.
+  - Enforce workspace creation limits server-side (Free: 1, Pro: 3, Business: 15).
+  - Implement dynamic upgrade triggers and paywall modals when a user attempts to create more workspaces than their plan allows.
+- [ ] **RevenueCat Integration:** Setup RevenueCat SDK for handling cross-platform subscriptions (iOS, Android, and Web).
+- [ ] **Billing Synchronization:** Connect webhook handlers to update `profiles.entitlement_tier` and `entitlement_source` based on live subscription events, respecting admin override precedence.
+- [ ] **Paywalls & Checkout:** Build the customer-facing upgrade and subscription checkout UI for free users.
 
 ## 🔜 Stage 5: Integrations (Google Calendar)
 - [ ] **Google Calendar Sync:** Implement OAuth flow for Google accounts.
