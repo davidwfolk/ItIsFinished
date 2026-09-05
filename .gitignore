@@ -50,3 +50,6 @@ src-tauri/target/
 
 # Supabase
 .supabase/local-dump.sql
+
+# Agent Scratchpad
+scratch/
