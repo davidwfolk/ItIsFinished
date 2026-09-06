@@ -47,9 +47,11 @@ export function LandingPage() {
       <header className="sticky top-0 z-40 backdrop-blur-md bg-zinc-950/80 border-b border-zinc-800/80 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/30">
-              F
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="It Is Finished" 
+              className="h-9 w-9 rounded-xl object-contain shadow-lg shadow-blue-600/20" 
+            />
             <div>
               <span className="font-bold text-base tracking-tight text-white">It Is Finished</span>
             </div>
@@ -542,9 +544,11 @@ export function LandingPage() {
       <footer className="border-t border-zinc-900 py-10 px-6 text-xs text-zinc-500 bg-zinc-950">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-zinc-400">
-            <div className="h-6 w-6 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xs">
-              F
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="It Is Finished" 
+              className="h-6 w-6 rounded-lg object-contain" 
+            />
             <span className="font-semibold text-zinc-300">It Is Finished</span>
             <span>— The instant daily planner for people who value their time.</span>
           </div>

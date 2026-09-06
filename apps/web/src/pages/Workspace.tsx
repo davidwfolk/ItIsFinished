@@ -743,9 +743,11 @@ export function Workspace() {
         <div className="flex flex-col gap-3 px-2 py-3 mb-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-600/20">
-                F
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="It Is Finished" 
+                className="h-8 w-8 rounded-lg object-contain shadow-md shadow-blue-600/20" 
+              />
               <div>
                 <h1 className="font-semibold text-sm tracking-tight text-zinc-100">It Is Finished</h1>
               </div>
