@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Briefcase, User, Users, Sparkles, Loader2 } from 'lucide-react';
 import { usePowerSync } from '@powersync/react';
 import { supabase } from '../lib/powersync';
@@ -70,7 +71,7 @@ export function CreateWorkspaceModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
       <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 relative animate-in zoom-in-95 duration-200">
         {/* Close Button */}
@@ -140,7 +141,7 @@ export function CreateWorkspaceModal({
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-semibold text-xs text-zinc-200 mb-1">
-                  <Users className="h-4 w-4 text-blue-400" />
+                  <Users className="h-4 w-4 text-blue-400 shrink-0" />
                   <span>Team Workspace</span>
                 </div>
                 <span className="text-[11px] text-zinc-500 leading-tight">
@@ -159,7 +160,7 @@ export function CreateWorkspaceModal({
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-semibold text-xs text-zinc-200 mb-1">
-                  <User className="h-4 w-4 text-emerald-400" />
+                  <User className="h-4 w-4 text-emerald-400 shrink-0" />
                   <span>Personal</span>
                 </div>
                 <span className="text-[11px] text-zinc-500 leading-tight">
@@ -199,6 +200,7 @@ export function CreateWorkspaceModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

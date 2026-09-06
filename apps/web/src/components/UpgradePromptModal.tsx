@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Sparkles, X, Check, Lock, ArrowRight } from 'lucide-react';
 
 interface UpgradePromptModalProps {
@@ -26,7 +27,7 @@ export function UpgradePromptModal({
     'Workspace aggregate and team analytics',
   ];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
       <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 relative animate-in zoom-in-95 duration-200">
         {/* Close Button */}
@@ -96,6 +97,7 @@ export function UpgradePromptModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
