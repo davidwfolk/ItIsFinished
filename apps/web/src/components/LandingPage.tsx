@@ -9,15 +9,22 @@ import {
   Sparkles, 
   Clock, 
   Tag, 
-  Database, 
   Lock, 
-  Cpu, 
-  LogIn
+  LogIn,
+  Zap,
+  Plane
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { parseQuickAdd, type ParsedTaskInput } from '@app/core';
 import { AuthModal } from './AuthModal';
 import { useAuth } from '../hooks/useAuth';
+
+const DEMO_PRESETS = [
+  { label: '🩺 Doctor Checkup', text: 'Doctor appointment tomorrow 2pm p1 45m #Personal' },
+  { label: '📊 Strategy Review', text: 'Team strategy review Friday 10am 1h p1 #Work' },
+  { label: '🏃 Morning Run', text: 'Morning 5k run tomorrow 7am 30m #Health' },
+  { label: '📖 Read 20 Pages', text: 'Read book tonight 8:30pm 30m #Habits' },
+];
 
 export function LandingPage() {
 
@@ -27,7 +34,7 @@ export function LandingPage() {
   });
   const { refreshAuth } = useAuth();
 
-  const [demoInput, setDemoInput] = useState('Deploy release to production tomorrow 3pm p1 45m #DevOps');
+  const [demoInput, setDemoInput] = useState('Doctor appointment tomorrow 2pm p1 45m #Personal');
   const [activeTab, setActiveTab] = useState<'calendar' | 'matrix' | 'habits' | 'nlp'>('calendar');
 
   const parsedDemo: ParsedTaskInput = useMemo(() => {
@@ -51,14 +58,13 @@ export function LandingPage() {
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-400">
             <a href="#features" className="hover:text-zinc-100 transition">Features</a>
             <a href="#demo" className="hover:text-zinc-100 transition">Live Demo</a>
-            <a href="#architecture" className="hover:text-zinc-100 transition">Architecture</a>
-            <a href="#comparison" className="hover:text-zinc-100 transition">Comparison</a>
+            <a href="#comparison" className="hover:text-zinc-100 transition">Why Finished</a>
           </nav>
 
           <div className="flex items-center gap-3">
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="text-xs font-medium text-zinc-300 hover:text-white px-3 py-2 rounded-lg hover:bg-zinc-900 transition flex items-center gap-1.5"
+              className="text-xs font-medium text-zinc-300 hover:text-white px-3 py-2 rounded-lg hover:bg-zinc-900 transition flex items-center gap-1.5 cursor-pointer"
             >
               <LogIn className="h-3.5 w-3.5" />
               Sign In
@@ -67,7 +73,7 @@ export function LandingPage() {
               onClick={() => setAuthModalOpen(true)}
               className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-4 py-2 rounded-xl transition shadow-lg shadow-blue-600/25 flex items-center gap-1.5 cursor-pointer"
             >
-              Launch App
+              Get Started Free
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -83,74 +89,73 @@ export function LandingPage() {
         <div className="max-w-5xl mx-auto text-center space-y-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-300 shadow-inner">
             <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Finished 2.0 Engine is Live</span>
+            <span>Finished 2.0 is Live</span>
             <span className="text-zinc-600">•</span>
-            <span className="text-blue-400 font-mono">SQLite + PowerSync Sync</span>
+            <span className="text-blue-400 font-medium">Instant & Offline-First</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-zinc-100 leading-[1.1]">
             Master Your Time.<br />
             <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
-              0ms Latency. 100% Offline.
+              At the speed of thought.
             </span>
           </h1>
 
           <p className="max-w-2xl mx-auto text-base sm:text-lg text-zinc-400 leading-relaxed">
-            The next-generation productivity system combining natural language quick-add, 
-            2×2 Eisenhower matrix prioritization, proportional time-blocking calendar, and habit streaks.
+            Stop fighting sluggish apps and scattered to-do lists. 'It Is Finished' unites natural quick-capture, daily time-blocking, priority matrices, and habit tracking into one blisteringly fast, distraction-free space.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
+              className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
             >
-              Launch App
+              Start Organizing Free
               <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setAuthModalOpen(true)}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 font-medium text-sm transition"
-            >
-              Sign In to Cloud
             </button>
             <a
               href="#demo"
               className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800 font-medium text-sm transition flex items-center justify-center gap-2"
             >
               <Sparkles className="h-4 w-4 text-blue-400" />
-              Try Interactive Demo
+              Try Live Demo
             </a>
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className="w-full sm:w-auto px-5 py-3.5 rounded-xl text-zinc-400 hover:text-zinc-200 font-medium text-sm transition cursor-pointer"
+            >
+              Sign In
+            </button>
           </div>
 
           {/* Value Badges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-10 max-w-3xl mx-auto text-left">
             <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400"><Cpu className="h-4 w-4" /></div>
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400"><Zap className="h-4 w-4" /></div>
               <div>
-                <div className="text-xs font-bold text-zinc-200">0ms SQLite</div>
-                <div className="text-[11px] text-zinc-500 font-mono">Zero spinner UI</div>
+                <div className="text-xs font-bold text-zinc-200">Instant Speed</div>
+                <div className="text-[11px] text-zinc-500">Zero loading spinners</div>
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400"><Database className="h-4 w-4" /></div>
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400"><Plane className="h-4 w-4" /></div>
               <div>
-                <div className="text-xs font-bold text-zinc-200">Offline First</div>
-                <div className="text-[11px] text-zinc-500 font-mono">Works on planes</div>
+                <div className="text-xs font-bold text-zinc-200">100% Offline</div>
+                <div className="text-[11px] text-zinc-500">Works on flights & trains</div>
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex items-center gap-3">
               <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400"><ShieldCheck className="h-4 w-4" /></div>
               <div>
-                <div className="text-xs font-bold text-zinc-200">Zero-Trust RLS</div>
-                <div className="text-[11px] text-zinc-500 font-mono">PostgreSQL 17</div>
+                <div className="text-xs font-bold text-zinc-200">Private by Design</div>
+                <div className="text-[11px] text-zinc-500">Your data stays yours</div>
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-500/10 text-orange-400"><Lock className="h-4 w-4" /></div>
               <div>
-                <div className="text-xs font-bold text-zinc-200">TOTP MFA</div>
-                <div className="text-[11px] text-zinc-500 font-mono">Hardware grade</div>
+                <div className="text-xs font-bold text-zinc-200">Bank-Grade Safety</div>
+                <div className="text-[11px] text-zinc-500">Two-factor protection</div>
               </div>
             </div>
           </div>
@@ -162,13 +167,13 @@ export function LandingPage() {
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="text-center space-y-2">
             <span className="text-xs font-mono uppercase tracking-widest text-blue-400 font-semibold">
-              Live Interactive Parser Demo
+              Instant Natural Quick-Add
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold text-zinc-100">
-              Natural Language Processing in 0 Milliseconds
+              Type the Way You Think
             </h2>
             <p className="text-sm text-zinc-400 max-w-xl mx-auto">
-              Type anything into the box below. Watch our real-time client NLP parser instantly extract priorities, dates, times, durations, and project tags before you even press Enter.
+              No clunky date pickers or endless dropdowns. Type naturally—Finished extracts dates, times, durations, and project tags in real time before your fingers leave the keys.
             </p>
           </div>
 
@@ -178,12 +183,26 @@ export function LandingPage() {
                 type="text"
                 value={demoInput}
                 onChange={(e) => setDemoInput(e.target.value)}
-                placeholder="e.g. Doctor appointment tomorrow 2pm p1 30m #Personal"
+                placeholder="e.g. Doctor appointment tomorrow 2pm p1 45m #Personal"
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-blue-500 font-mono"
               />
               <div className="absolute right-3 top-3 px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-400">
-                0ms Local
+                0ms Instant
               </div>
+            </div>
+
+            {/* Quick Sample Chips */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs text-zinc-500 font-medium">Try an example:</span>
+              {DEMO_PRESETS.map((preset, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setDemoInput(preset.text)}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 transition cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
 
             {/* Extracted Tokens Badges */}
@@ -228,13 +247,13 @@ export function LandingPage() {
       <section id="features" className="py-20 px-6 max-w-7xl mx-auto space-y-12">
         <div className="text-center space-y-3">
           <span className="text-xs font-mono uppercase tracking-widest text-purple-400 font-semibold">
-            Complete Productivity Architecture
+            Your Complete Daily System
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-100">
-            Four Core Pillars. One Unified System.
+            Four Core Pillars. One Unified Flow.
           </h2>
           <p className="text-sm text-zinc-400 max-w-2xl mx-auto">
-            Switch effortlessly between time-blocking, prioritization matrix, habit tracking, and fast lists.
+            Most people juggle separate apps for their to-do list, calendar, and habit tracking. Finished unites them into one fluid rhythm.
           </p>
         </div>
 
@@ -255,7 +274,7 @@ export function LandingPage() {
                 activeTab === 'matrix' ? 'bg-blue-600 text-white font-semibold shadow-lg shadow-blue-600/30' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Grid className="h-4 w-4" /> 2×2 Eisenhower Matrix
+              <Grid className="h-4 w-4" /> 2×2 Priority Matrix
             </button>
             <button
               onClick={() => setActiveTab('habits')}
@@ -263,7 +282,7 @@ export function LandingPage() {
                 activeTab === 'habits' ? 'bg-blue-600 text-white font-semibold shadow-lg shadow-blue-600/30' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Flame className="h-4 w-4" /> Daily Habit Matrix
+              <Flame className="h-4 w-4" /> Daily Habit Tracker
             </button>
           </div>
         </div>
@@ -277,39 +296,39 @@ export function LandingPage() {
                   <Calendar className="h-3.5 w-3.5" /> Visual Time Grid
                 </div>
                 <h3 className="text-2xl font-bold text-zinc-100">
-                  Proportional Time-Blocking with 2-Way Inbox Drag
+                  Visual Time-Blocking: Turn Lists into Reality
                 </h3>
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Schedule your day down to the minute. Tasks render with true proportional heights (15m, 30m, 45m, 60m+). Drag any unscheduled task from your Inbox right into your calendar, or drop it back to unschedule in 0ms.
+                  See your day as actual time, not an endless wishlist. Tasks render with true visual heights (15m, 30m, 1h+). Drag tasks directly from your Inbox onto your schedule, or drop them back to unschedule with zero lag.
                 </p>
                 <ul className="space-y-2 text-xs text-zinc-300">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-blue-400" />
-                    <span>Top-edge dragging to adjust start times in 15-minute intervals.</span>
+                    <span>Drag top edge to adjust start times in clean 15-minute intervals.</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-blue-400" />
-                    <span>Clean 12-hour AM/PM formatting with right-aligned duration chips.</span>
+                    <span>Clean 12-hour AM/PM formatting with instant duration chips.</span>
                   </li>
                 </ul>
               </div>
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-inner space-y-2">
                 <div className="text-[11px] font-mono text-zinc-500 flex justify-between border-b border-zinc-800 pb-2">
-                  <span>Today's Time-Grid</span>
-                  <span className="text-emerald-400">Synced</span>
+                  <span>Today's Schedule</span>
+                  <span className="text-emerald-400 font-sans font-medium">Synced</span>
                 </div>
                 <div className="space-y-2 pt-1 font-mono text-xs">
                   <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 flex justify-between items-center">
-                    <span>9:00 AM • Architecture Review</span>
-                    <span className="text-[10px] bg-red-500/20 px-1.5 py-0.5 rounded">30m</span>
+                    <span>9:00 AM • Deep Focus: Core Project</span>
+                    <span className="text-[10px] bg-red-500/20 px-1.5 py-0.5 rounded">1h</span>
                   </div>
                   <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 flex justify-between items-center">
-                    <span>10:00 AM • Deep Focus: Core Engine</span>
-                    <span className="text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded">1h</span>
+                    <span>10:30 AM • Team Planning & Sync</span>
+                    <span className="text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded">45m</span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-300 flex justify-between items-center">
-                    <span>1:30 PM • Client Sync & Demo</span>
-                    <span className="text-[10px] bg-orange-500/20 px-1.5 py-0.5 rounded">45m</span>
+                    <span>1:30 PM • Client Strategy Review</span>
+                    <span className="text-[10px] bg-orange-500/20 px-1.5 py-0.5 rounded">30m</span>
                   </div>
                 </div>
               </div>
@@ -323,38 +342,38 @@ export function LandingPage() {
                   <Grid className="h-3.5 w-3.5" /> 2×2 Eisenhower Matrix
                 </div>
                 <h3 className="text-2xl font-bold text-zinc-100">
-                  Kill Decision Fatigue with Eisenhower Prioritization
+                  Kill Decision Fatigue with Instant Prioritization
                 </h3>
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Instantly categorize what needs urgent attention vs. what drives high-impact long-term leverage. Drag tasks seamlessly between Q1 (Do First), Q2 (Schedule), Q3 (Delegate), and Q4 (Eliminate).
+                  Easily separate what's truly urgent from what just feels loud. Drag tasks seamlessly between Q1 (Do First), Q2 (Schedule), Q3 (Delegate), and Q4 (Eliminate).
                 </p>
                 <ul className="space-y-2 text-xs text-zinc-300">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-red-400" />
-                    <span>Instant priority reassignments in SQLite with zero latency.</span>
+                    <span>Instant priority reassignments with zero lag.</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-red-400" />
-                    <span>Automatic integration with today focus and calendar time-blocks.</span>
+                    <span>Seamlessly integrates with your today view and calendar time-grid.</span>
                   </li>
                 </ul>
               </div>
               <div className="grid grid-cols-2 gap-2 bg-zinc-950 border border-zinc-800 rounded-2xl p-3 text-xs font-mono">
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl space-y-1">
                   <div className="text-red-400 font-bold text-[10px]">Q1: DO FIRST</div>
-                  <div className="text-zinc-200 truncate">Prod hotfix deploy</div>
+                  <div className="text-zinc-200 truncate">Finalize client deliverable</div>
                 </div>
                 <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-1">
                   <div className="text-blue-400 font-bold text-[10px]">Q2: SCHEDULE</div>
-                  <div className="text-zinc-200 truncate">Q4 Strategy review</div>
+                  <div className="text-zinc-200 truncate">Quarterly roadmap planning</div>
                 </div>
                 <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl space-y-1">
                   <div className="text-orange-400 font-bold text-[10px]">Q3: DELEGATE</div>
-                  <div className="text-zinc-200 truncate">Update changelog</div>
+                  <div className="text-zinc-200 truncate">Schedule weekly check-ins</div>
                 </div>
                 <div className="p-3 bg-zinc-800/40 border border-zinc-700/40 rounded-xl space-y-1">
                   <div className="text-zinc-400 font-bold text-[10px]">Q4: ELIMINATE</div>
-                  <div className="text-zinc-400 truncate">Clean old inbox</div>
+                  <div className="text-zinc-400 truncate">Clean out promotional inbox</div>
                 </div>
               </div>
             </div>
@@ -367,15 +386,15 @@ export function LandingPage() {
                   <Flame className="h-3.5 w-3.5" /> Habit Streaks
                 </div>
                 <h3 className="text-2xl font-bold text-zinc-100">
-                  Build Ironclad Consistency with Habit Matrices
+                  Build Consistency That Lasts with Habit Streaks
                 </h3>
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Track recurring routines, morning focus sessions, and workouts with interactive streak visualizers. Single-click completions update your SQLite database and calculate your active streak instantly.
+                  Track recurring routines, morning focus, and personal health with visual streak trackers. Single-click completions update instantly and keep your momentum going every day.
                 </p>
                 <ul className="space-y-2 text-xs text-zinc-300">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-orange-400" />
-                    <span>Real-time streak calculation with zero round-trip latency.</span>
+                    <span>Real-time streak counting and visual progress.</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-orange-400" />
@@ -409,46 +428,73 @@ export function LandingPage() {
       </section>
 
       {/* Comparison Grid Section */}
-      <section id="comparison" className="py-16 px-6 border-t border-zinc-900 bg-zinc-950">
+      <section id="comparison" className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
         <div className="max-w-5xl mx-auto space-y-8">
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-3">
             <span className="text-xs font-mono uppercase tracking-widest text-emerald-400 font-semibold">
-              The Architecture Difference
+              Why Local-First Changes Everything
             </span>
             <h2 className="text-3xl font-bold text-zinc-100">
-              Why Local-First Outperforms Legacy Apps
+              The Speed Difference You Can Actually Feel
             </h2>
+            <p className="text-sm text-zinc-400 max-w-xl mx-auto">
+              Most task apps make you wait on a remote server across the world for every single click. Finished lives directly on your device and syncs silently in the background.
+            </p>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border border-zinc-800 rounded-2xl overflow-hidden">
               <thead className="bg-zinc-900 text-zinc-300 font-mono uppercase text-[11px] border-b border-zinc-800">
                 <tr>
-                  <th className="p-4">Feature Metric</th>
-                  <th className="p-4 text-blue-400 font-bold bg-blue-500/5">Finished (Local-First)</th>
-                  <th className="p-4 text-zinc-500">Legacy Cloud Tasks (Todoist/TickTick)</th>
+                  <th className="p-4 w-1/4">Experience</th>
+                  <th className="p-4 w-3/8 text-blue-400 font-bold bg-blue-500/5">Finished (Local-First)</th>
+                  <th className="p-4 w-3/8 text-zinc-500">Typical Cloud Apps (Todoist / TickTick)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800 font-mono">
+              <tbody className="divide-y divide-zinc-800 font-sans">
                 <tr className="hover:bg-zinc-900/50">
-                  <td className="p-4 font-sans font-medium text-zinc-200">Read & Write Latency</td>
-                  <td className="p-4 text-emerald-400 font-bold bg-blue-500/5">⚡ 0ms (Local SQLite)</td>
-                  <td className="p-4 text-zinc-400">⏳ 300ms - 1200ms (Cloud API)</td>
+                  <td className="p-4 font-semibold text-zinc-200">Speed & Responsiveness</td>
+                  <td className="p-4 bg-blue-500/5">
+                    <div className="text-emerald-400 font-bold font-mono">⚡ Instant (0ms)</div>
+                    <div className="text-[11px] text-zinc-400 pt-0.5">Every click, checkmark, and view updates immediately with zero spinners.</div>
+                  </td>
+                  <td className="p-4">
+                    <div className="text-zinc-400 font-medium font-mono">⏳ Sluggish (300ms – 1s)</div>
+                    <div className="text-[11px] text-zinc-500 pt-0.5">Constantly waiting on cloud network requests.</div>
+                  </td>
                 </tr>
                 <tr className="hover:bg-zinc-900/50">
-                  <td className="p-4 font-sans font-medium text-zinc-200">Offline Functionality</td>
-                  <td className="p-4 text-emerald-400 font-bold bg-blue-500/5">✅ 100% full read, write, reorder</td>
-                  <td className="p-4 text-red-400">❌ Degraded / Blocked / Conflicts</td>
+                  <td className="p-4 font-semibold text-zinc-200">Offline Reliability</td>
+                  <td className="p-4 bg-blue-500/5">
+                    <div className="text-emerald-400 font-bold font-mono">✈️ 100% Unrestricted</div>
+                    <div className="text-[11px] text-zinc-400 pt-0.5">Plan your day on an airplane, subway, or in spotty WiFi without missing a beat.</div>
+                  </td>
+                  <td className="p-4">
+                    <div className="text-red-400 font-medium font-mono">❌ Degraded or Blocked</div>
+                    <div className="text-[11px] text-zinc-500 pt-0.5">Features freeze, fail to save, or trigger messy sync conflicts.</div>
+                  </td>
                 </tr>
                 <tr className="hover:bg-zinc-900/50">
-                  <td className="p-4 font-sans font-medium text-zinc-200">Reordering Engine</td>
-                  <td className="p-4 text-emerald-400 font-bold bg-blue-500/5">🚀 Fractional Lexicographical (O(1))</td>
-                  <td className="p-4 text-zinc-400">⚠️ Bulk Table Rewrites (O(N))</td>
+                  <td className="p-4 font-semibold text-zinc-200">Reordering & Dragging</td>
+                  <td className="p-4 bg-blue-500/5">
+                    <div className="text-emerald-400 font-bold font-mono">🚀 Butter-Smooth</div>
+                    <div className="text-[11px] text-zinc-400 pt-0.5">Drag, drop, and rearrange hundreds of tasks effortlessly without lag.</div>
+                  </td>
+                  <td className="p-4">
+                    <div className="text-zinc-400 font-medium font-mono">⚠️ Stuttery & Delayed</div>
+                    <div className="text-[11px] text-zinc-500 pt-0.5">Jumpy interface while cloud tables recalculate task positions.</div>
+                  </td>
                 </tr>
                 <tr className="hover:bg-zinc-900/50">
-                  <td className="p-4 font-sans font-medium text-zinc-200">Data Privacy & Security</td>
-                  <td className="p-4 text-emerald-400 font-bold bg-blue-500/5">🛡️ Zero-Trust Supabase RLS + TOTP MFA</td>
-                  <td className="p-4 text-zinc-400">🔒 Basic Shared Cloud Tables</td>
+                  <td className="p-4 font-semibold text-zinc-200">Privacy & Ownership</td>
+                  <td className="p-4 bg-blue-500/5">
+                    <div className="text-emerald-400 font-bold font-mono">🛡️ Private & Protected</div>
+                    <div className="text-[11px] text-zinc-400 pt-0.5">Your tasks live securely on your device with modern encrypted cloud backup.</div>
+                  </td>
+                  <td className="p-4">
+                    <div className="text-zinc-400 font-medium font-mono">🔒 Centralized Cloud</div>
+                    <div className="text-[11px] text-zinc-500 pt-0.5">Your personal tasks sit on shared corporate databases.</div>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -458,30 +504,36 @@ export function LandingPage() {
 
       {/* Call to Action Banner */}
       <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto rounded-3xl bg-gradient-to-b from-blue-900/40 to-zinc-900 border border-blue-500/30 p-10 text-center space-y-6 shadow-2xl relative overflow-hidden">
+        <div className="max-w-4xl mx-auto rounded-3xl bg-gradient-to-b from-blue-900/40 to-zinc-900 border border-blue-500/30 p-10 sm:p-12 text-center space-y-6 shadow-2xl relative overflow-hidden">
           <div className="space-y-3">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-zinc-100">
-              Ready for Zero-Latency Productivity?
+              End Every Day with Peace of Mind.
             </h2>
-            <p className="text-sm sm:text-base text-zinc-300 max-w-xl mx-auto">
-              Join the future of local-first software. Your data stays in your hands, synced securely across every screen you own.
+            <p className="text-sm sm:text-base text-zinc-300 max-w-xl mx-auto leading-relaxed">
+              Stop letting to-do lists overwhelm you. Plan faster, stay focused, and finish what you start—completely free.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
             >
-              Launch Finished Now
+              Get Started for Free
               <ArrowRight className="h-4 w-4" />
             </button>
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="w-full sm:w-auto px-6 py-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium text-sm transition"
+              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium text-sm transition cursor-pointer"
             >
-              Create Free Account
+              Sign In
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-6 pt-3 text-xs text-zinc-400">
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Free to get started</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> No credit card required</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Instant sync across all devices</span>
           </div>
         </div>
       </section>
@@ -493,16 +545,18 @@ export function LandingPage() {
             <div className="h-6 w-6 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xs">
               F
             </div>
-            <span className="font-semibold text-zinc-300">Finished</span>
-            <span>— 0ms Local-First Task & Calendar System</span>
+            <span className="font-semibold text-zinc-300">It Is Finished</span>
+            <span>— The instant daily planner for people who value their time.</span>
           </div>
 
-          <div className="flex items-center gap-6 font-mono text-[11px]">
-            <span>PostgreSQL 17</span>
+          <div className="flex items-center gap-6 text-[12px] text-zinc-400">
+            <a href="#features" className="hover:text-zinc-200 transition">Features</a>
             <span>•</span>
-            <span>PowerSync SQLite</span>
+            <a href="#demo" className="hover:text-zinc-200 transition">Live Demo</a>
             <span>•</span>
-            <span>Supabase Auth & MFA</span>
+            <a href="#comparison" className="hover:text-zinc-200 transition">Why Finished</a>
+            <span>•</span>
+            <button onClick={() => setAuthModalOpen(true)} className="hover:text-zinc-200 transition cursor-pointer">Sign In</button>
           </div>
         </div>
       </footer>
