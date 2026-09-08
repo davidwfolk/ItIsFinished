@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Mail, Shield, UserPlus, X, Check, Trash2, ShieldCheck, ArrowRightLeft } from 'lucide-react';
+import { Users, Mail, Shield, UserPlus, X, Check, Trash2 } from 'lucide-react';
 import { supabase, powersync } from '../lib/powersync';
 import { useQuery } from '@powersync/react';
 import { useAuth } from '../hooks/useAuth';
