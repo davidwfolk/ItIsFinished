@@ -38,6 +38,8 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import { GlobalBanners } from './components/GlobalBanners';
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   
@@ -58,6 +60,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return (
     <>
       <PowerSyncManager />
+      <GlobalBanners />
       {children}
     </>
   );

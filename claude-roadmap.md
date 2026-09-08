@@ -211,6 +211,13 @@ These dramatically improve reliability, developer velocity, and user experience.
 
 ---
 
+### 3.7 — Business and Enterprise Collaboration Models
+- **Priority**: P3 | **Impact**: High (for B2B) | **Complexity**: Medium
+- Define distinct workspace rules for Business/Enterprise accounts (e.g., whether members default to workspace-wide project visibility vs strictly assigned projects).
+- **Files**: New migrations for tier configs, modifications to RLS policies.
+
+---
+
 ## 🟢 Tier 4: Nice-to-Have Experiments
 
 ### 4.1 — AI Task Decomposition

@@ -10,6 +10,8 @@ import {
   Calendar as CalendarIcon,
   Plus,
   Edit2,
+  Users,
+  ArrowRightLeft,
   Check,
   X
 } from 'lucide-react';
@@ -17,6 +19,8 @@ import { supabase, powersync } from '../lib/powersync';
 import { useAuth } from '../hooks/useAuth';
 import { MfaSetupModal } from '../components/MfaSetupModal';
 import { CreateWorkspaceModal } from '../components/CreateWorkspaceModal';
+import { WorkspaceMembersModal } from '../components/WorkspaceMembersModal';
+import { TransferOwnershipModal } from '../components/TransferOwnershipModal';
 import { updateWorkspace, deleteWorkspace } from '@app/core';
 import { useQuery } from '@powersync/react';
 
@@ -34,6 +38,8 @@ export function SettingsPage() {
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [editingWorkspaceName, setEditingWorkspaceName] = useState('');
   const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
+  const [membersModalWorkspaceId, setMembersModalWorkspaceId] = useState<{id: string, name: string, role: string} | null>(null);
+  const [transferModalWorkspaceId, setTransferModalWorkspaceId] = useState<{id: string, name: string} | null>(null);
 
   const { data: profiles = [] } = useQuery(`SELECT * FROM profiles WHERE id = ?`, [user?.id || '']);
   const profile = profiles[0] || {};
@@ -43,6 +49,8 @@ export function SettingsPage() {
     name: string;
     is_personal: number;
     created_at: string;
+    workspace_status: string;
+    orphaned_at: string;
   }>(`SELECT * FROM workspaces WHERE deleted_at IS NULL ORDER BY is_personal DESC, name ASC`);
 
   const { data: workspaceMembers = [] } = useQuery<{
@@ -307,6 +315,11 @@ export function SettingsPage() {
                                 >
                                   {ws.is_personal === 1 ? 'Personal' : 'Team'}
                                 </span>
+                                {ws.workspace_status === 'orphaned' && (
+                                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20 flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3" /> Scheduled for Deletion
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-2">
                                 <span>
@@ -323,6 +336,25 @@ export function SettingsPage() {
 
                         {!isEditingThis && (
                           <div className="flex items-center gap-2 shrink-0">
+                            {(myMembership?.role === 'owner' || myMembership?.role === 'admin') && (
+                              <button
+                                onClick={() => setMembersModalWorkspaceId({ id: ws.id, name: ws.name, role: myMembership.role })}
+                                className="p-2 rounded-lg text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10 transition"
+                                title="Manage Members"
+                              >
+                                <Users className="h-4 w-4" />
+                              </button>
+                            )}
+                            {isOwner && ws.is_personal === 0 && (
+                              <button
+                                onClick={() => setTransferModalWorkspaceId({ id: ws.id, name: ws.name })}
+                                className="p-2 rounded-lg text-zinc-400 hover:text-orange-400 hover:bg-orange-500/10 transition"
+                                title="Transfer Ownership"
+                              >
+                                <ArrowRightLeft className="h-4 w-4" />
+                              </button>
+                            )}
+
                             {isOwner && (
                               <button
                                 onClick={() => {
@@ -500,6 +532,26 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {membersModalWorkspaceId && (
+        <WorkspaceMembersModal
+          isOpen={true}
+          onClose={() => setMembersModalWorkspaceId(null)}
+          workspaceId={membersModalWorkspaceId.id}
+          workspaceName={membersModalWorkspaceId.name}
+          currentUserRole={membersModalWorkspaceId.role}
+        />
+      )}
+
+      {transferModalWorkspaceId && (
+        <TransferOwnershipModal
+          isOpen={true}
+          onClose={() => setTransferModalWorkspaceId(null)}
+          workspaceId={transferModalWorkspaceId.id}
+          workspaceName={transferModalWorkspaceId.name}
+        />
+      )}
+
     </div>
   );
 }
