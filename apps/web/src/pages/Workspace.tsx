@@ -217,11 +217,27 @@ export function Workspace() {
   }, [fetchWorkspaceMeta]);
 
   const isPro = userProfile?.entitlement_tier === 'pro';
-  const effectiveLimits = userProfile?.is_vip
-    ? userProfile.vip_custom_perks
-    : (userProfile?.is_early_adopter && userProfile?.grandfathered_limits)
+  const isVip = !!userProfile?.is_vip;
+  const isEarlyAdopter = !!userProfile?.is_early_adopter;
+
+  const effectiveLimits = isVip
+    ? (userProfile?.vip_custom_perks || {})
+    : (isEarlyAdopter && userProfile?.grandfathered_limits)
     ? userProfile.grandfathered_limits
     : tierConfigs['free'] || {};
+
+  const effectiveMaxWorkspaces = useMemo(() => {
+    if (isVip && userProfile?.vip_custom_perks?.max_workspaces !== undefined) {
+      return Number(userProfile.vip_custom_perks.max_workspaces);
+    }
+    if (isEarlyAdopter && userProfile?.grandfathered_limits?.max_workspaces !== undefined) {
+      return Number(userProfile.grandfathered_limits.max_workspaces);
+    }
+    if (isPro) {
+      return tierConfigs['pro']?.max_workspaces ?? 3;
+    }
+    return tierConfigs['free']?.max_workspaces ?? 1;
+  }, [isVip, isEarlyAdopter, isPro, userProfile, tierConfigs]);
 
   const hasTimeBlocking = isPro || !!effectiveLimits.has_time_blocking;
   const hasEisenhowerMatrix = isPro || !!effectiveLimits.has_eisenhower_matrix;
@@ -769,7 +785,8 @@ export function Workspace() {
               activeWorkspaceId={activeWorkspaceId} 
               onSwitch={handleSwitchWorkspace} 
               isPro={isPro}
-              maxWorkspaces={isPro ? (tierConfigs['pro']?.max_workspaces ?? 3) : (effectiveLimits?.max_workspaces ?? 1)}
+              isVip={isVip}
+              maxWorkspaces={effectiveMaxWorkspaces}
               onOpenUpgrade={() => {
                 setUpgradeModalFeature({
                   name: 'Multiple Workspaces',

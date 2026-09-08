@@ -8,6 +8,7 @@ interface WorkspaceSwitcherProps {
   activeWorkspaceId: string | null;
   onSwitch: (id: string) => void;
   isPro?: boolean;
+  isVip?: boolean;
   maxWorkspaces?: number;
   onOpenUpgrade?: () => void;
   onOpenCreateWorkspace?: () => void;
@@ -17,6 +18,7 @@ export function WorkspaceSwitcher({
   activeWorkspaceId,
   onSwitch,
   isPro = false,
+  isVip = false,
   maxWorkspaces = 1,
   onOpenUpgrade,
   onOpenCreateWorkspace,
@@ -121,6 +123,11 @@ export function WorkspaceSwitcher({
           <div className="px-2 py-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             <span>Workspaces</span>
             <div className="flex items-center gap-1.5 font-mono">
+              {isVip && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-sans font-bold flex items-center gap-1">
+                  👑 VIP
+                </span>
+              )}
               {isPro && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-sans font-bold">
                   PRO

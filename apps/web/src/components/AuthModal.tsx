@@ -8,6 +8,9 @@ export interface AuthModalProps {
   onSuccess?: () => void;
 }
 
+// Toggle OAuth providers (Google / Apple) - disabled until configured in Supabase
+const SHOW_OAUTH_PROVIDERS = false;
+
 export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
   const [mode, setMode] = useState<'signin' | 'signup' | 'magiclink' | 'mfa_challenge'>('signin');
   const [email, setEmail] = useState('');
@@ -172,8 +175,8 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
           </div>
         )}
 
-        {/* OAuth Buttons (Only in normal signin/signup modes) */}
-        {mode !== 'mfa_challenge' && (
+        {/* OAuth Buttons (Only in normal signin/signup modes when enabled) */}
+        {SHOW_OAUTH_PROVIDERS && mode !== 'mfa_challenge' && (
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -203,7 +206,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
           </div>
         )}
 
-        {mode !== 'mfa_challenge' && (
+        {SHOW_OAUTH_PROVIDERS && mode !== 'mfa_challenge' && (
           <div className="relative flex items-center justify-center">
             <div className="border-t border-zinc-800 w-full" />
             <span className="bg-zinc-900 px-3 text-[10px] uppercase font-mono text-zinc-500 absolute">
