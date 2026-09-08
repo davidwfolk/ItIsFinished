@@ -11,7 +11,7 @@ import { AuditLogList } from './pages/audit-logs/AuditLogList';
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/admin">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Layout />}>

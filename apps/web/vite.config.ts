@@ -10,5 +10,13 @@ export default defineConfig({
   },
   worker: {
     format: 'es'
-  }
+  },
+  server: {
+    proxy: {
+      '/admin': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+      },
+    },
+  },
 });
