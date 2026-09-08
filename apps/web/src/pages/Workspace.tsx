@@ -230,13 +230,11 @@ export function Workspace() {
     if (isVip && userProfile?.vip_custom_perks?.max_workspaces !== undefined) {
       return Number(userProfile.vip_custom_perks.max_workspaces);
     }
+    const baseLimit = isPro ? (tierConfigs['pro']?.max_workspaces ?? 3) : (tierConfigs['free']?.max_workspaces ?? 1);
     if (isEarlyAdopter && userProfile?.grandfathered_limits?.max_workspaces !== undefined) {
-      return Number(userProfile.grandfathered_limits.max_workspaces);
+      return Math.max(baseLimit, Number(userProfile.grandfathered_limits.max_workspaces));
     }
-    if (isPro) {
-      return tierConfigs['pro']?.max_workspaces ?? 3;
-    }
-    return tierConfigs['free']?.max_workspaces ?? 1;
+    return baseLimit;
   }, [isVip, isEarlyAdopter, isPro, userProfile, tierConfigs]);
 
   const hasTimeBlocking = isPro || !!effectiveLimits.has_time_blocking;
