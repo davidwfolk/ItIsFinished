@@ -82,6 +82,7 @@ export const task_tags = new Table({
   workspace_id: column.text,
   task_id: column.text,
   tag_id: column.text,
+  deleted_at: column.text,
   created_at: column.text
 });
 
@@ -104,6 +105,7 @@ export const habit_logs = new Table({
   habit_id: column.text,
   log_date: column.text,
   count: column.integer,
+  deleted_at: column.text,
   created_at: column.text
 });
 
@@ -176,6 +178,7 @@ export const time_blocks = new Table({
   date: column.text,
   start_time: column.text,
   end_time: column.text,
+  deleted_at: column.text,
   created_at: column.text,
   updated_at: column.text
 });
