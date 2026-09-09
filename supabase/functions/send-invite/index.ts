@@ -20,6 +20,7 @@ serve(async (req) => {
     }
 
     // 3. Send Email via External API (Resend)
+    const senderEmail = Deno.env.get('SENDER_EMAIL') || 'invites@itisfinishedapp.com';
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -27,7 +28,7 @@ serve(async (req) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'invites@itisfinishedapp.com',
+        from: senderEmail,
         to: invite.email,
         subject: 'You have been invited to a workspace',
         html: `<p>You have been invited to join a workspace! Click <a href="https://itisfinishedapp.com/invite?token=${invite.token}">here</a> to join.</p>`
