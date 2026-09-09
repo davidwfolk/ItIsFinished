@@ -1,12 +1,21 @@
+import 'react-native-url-polyfill/auto';
 import { PowerSyncDatabase } from '@powersync/react-native';
 import { AppSchema } from '@app/core';
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Supabase configuration
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://hyrffgsjmobdffpgoalw.supabase.co';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_3KFP0qwqMPLz3IanQAYejA_VreUz38c';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 let powersyncInstance: PowerSyncDatabase | null = null;
 

@@ -34,9 +34,9 @@ bucket_definitions:
         AND EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = (request.jwt_claim('user_metadata')->>'active_workspace_id')::uuid AND user_id = request.user_id())
     data:
       - SELECT * FROM tasks WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
-      - SELECT * FROM habit_logs WHERE workspace_id = (bucket.active_id)::uuid
-      - SELECT * FROM task_tags WHERE workspace_id = (bucket.active_id)::uuid
+      - SELECT * FROM habit_logs WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
+      - SELECT * FROM task_tags WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
       - SELECT * FROM comments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
       - SELECT * FROM attachments WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
-      - SELECT * FROM time_blocks WHERE workspace_id = (bucket.active_id)::uuid
+      - SELECT * FROM time_blocks WHERE workspace_id = (bucket.active_id)::uuid AND deleted_at IS NULL
       - SELECT * FROM focus_sessions WHERE workspace_id = (bucket.active_id)::uuid

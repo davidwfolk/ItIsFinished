@@ -3,7 +3,7 @@ import { supabase, setupPowerSync } from './powersync';
 import { SupabaseConnector } from './SupabaseConnector';
 import { checkAndEnforceTTL, getOrGenerateEncryptionKey } from './sqlcipher';
 import { PowerSyncContext, usePowerSync } from '@powersync/react';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { AbstractPowerSyncDatabase } from '@powersync/react-native';
 
 interface WorkspaceContextType {
@@ -33,6 +33,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+  const isNavigationReady = !!rootNavigationState?.key;
+
+  // Separate effect to handle routing when auth state changes or finishes loading
+  useEffect(() => {
+    if (!isNavigationReady || isLoading) return;
+
+    if (!isAuthenticated && segments[0] !== 'login') {
+      router.replace('/login');
+    } else if (isAuthenticated && segments[0] === 'login') {
+      router.replace('/(tabs)');
+    }
+  }, [isNavigationReady, isLoading, isAuthenticated, segments, router]);
 
   useEffect(() => {
     let mounted = true;
@@ -45,29 +58,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (mounted) {
           setIsAuthenticated(false);
           setIsLoading(false);
-          router.replace('/login');
         }
         return;
       }
 
       // 2. Load active workspace & Auth state
-      // COLD BOOT TRAP: Rely on getSession() which checks local storage for the refresh token.
-      // If there is a network error, supabase-js still returns the session from storage.
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error && error.message.includes('Invalid Refresh Token')) {
-        // Token was explicitly revoked by the server
         console.error('Session revoked:', error.message);
         if (mounted) {
           setIsAuthenticated(false);
-          router.replace('/login');
+          setIsLoading(false);
         }
         return;
       } else if (!session) {
         if (mounted) {
           setIsAuthenticated(false);
           setIsLoading(false);
-          router.replace('/login');
         }
         return;
       }
@@ -84,7 +92,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         
         await db.connect(connector);
 
-        // If no active workspace is set in user metadata, default to the personal workspace from SQLite
         if (!currentActiveId) {
           try {
             const ws = await db.getAll<{ id: string; is_personal: number }>(
@@ -114,7 +121,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setIsAuthenticated(false);
         setActiveWorkspaceId(null);
         if (powerSyncDb) await powerSyncDb.disconnectAndClear();
-        router.replace('/login');
       } else if (event === 'SIGNED_IN' && session) {
         setIsAuthenticated(true);
         setActiveWorkspaceId(session.user?.user_metadata?.active_workspace_id || null);
@@ -123,7 +129,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const db = await setupPowerSync(key);
         setPowerSyncDb(db);
         await db.connect(connector);
-        router.replace('/(tabs)');
       }
     });
 
@@ -131,7 +136,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [connector, router]);
+  }, [connector]);
 
   const switchWorkspace = async (workspaceId: string) => {
     setIsLoading(true);

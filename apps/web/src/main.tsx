@@ -4,7 +4,6 @@ import { PowerSyncContext } from '@powersync/react';
 import { powersync, initDatabase } from './lib/powersync';
 import './index.css';
 import App from './App.tsx';
-import './lib/expose';
 
 function Root() {
   const [ready, setReady] = useState(false);

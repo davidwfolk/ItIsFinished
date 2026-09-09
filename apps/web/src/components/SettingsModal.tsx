@@ -24,14 +24,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setIsDeleting(true);
     setDeleteError(null);
     try {
-      const { error } = await supabase.rpc('delete_user');
+      const { error } = await supabase.functions.invoke('delete-user', {
+        method: 'POST',
+      });
       if (error) throw error;
 
       await signOut();
       window.location.href = '/';
     } catch (err: any) {
       console.error('Failed to delete account:', err);
-      setDeleteError(err.message || 'Failed to delete account. Ensure the database function exists.');
+      setDeleteError(err.message || 'Failed to delete account.');
       setIsDeleting(false);
     }
   };
