@@ -1,24 +1,24 @@
 import { BarChart3, Flame, Clock, CheckCircle2, TrendingUp, Zap, Calendar as CalendarIcon } from 'lucide-react';
 import { useQuery } from '@powersync/react';
 
-export function AnalyticsDashboard() {
+export function AnalyticsDashboard({ activeWorkspaceId }: { activeWorkspaceId: string | null }) {
   const { data: habits = [] } = useQuery<any>(
-    `SELECT * FROM habits WHERE deleted_at IS NULL ORDER BY created_at ASC`
+    `SELECT * FROM habits WHERE deleted_at IS NULL AND workspace_id = ? ORDER BY created_at ASC`, [activeWorkspaceId]
   );
   
   // Fetch recent logs (e.g., last 40 days to cover the calendar view)
   const { data: logs = [] } = useQuery<any>(
-    `SELECT * FROM habit_logs`
+    `SELECT * FROM habit_logs WHERE workspace_id = ?`, [activeWorkspaceId]
   );
 
   // Fetch actual tasks
   const { data: allTasks = [] } = useQuery<any>(
-    `SELECT * FROM tasks WHERE deleted_at IS NULL AND parent_id IS NULL`
+    `SELECT * FROM tasks WHERE deleted_at IS NULL AND parent_id IS NULL AND workspace_id = ?`, [activeWorkspaceId]
   );
 
   // Fetch actual focus sessions
   const { data: allFocusSessions = [] } = useQuery<any>(
-    `SELECT * FROM focus_sessions`
+    `SELECT * FROM focus_sessions WHERE workspace_id = ?`, [activeWorkspaceId]
   );
 
   const now = new Date();

@@ -17,9 +17,10 @@ import type { TaskRow, FocusSessionRow } from '@app/core';
 export interface FocusTimerViewProps {
   initialTaskId?: string | null;
   onNavigateToTask?: (taskId: string) => void;
+  activeWorkspaceId?: string | null;
 }
 
-export function FocusTimerView({ initialTaskId }: FocusTimerViewProps) {
+export function FocusTimerView({ initialTaskId, activeWorkspaceId }: FocusTimerViewProps) {
   const powersync = usePowerSync();
 
   // Query active tasks from SQLite for the task selector
@@ -27,8 +28,8 @@ export function FocusTimerView({ initialTaskId }: FocusTimerViewProps) {
     `SELECT t.*, p.name as project_name 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
-     WHERE t.deleted_at IS NULL AND t.completed_at IS NULL AND t.parent_id IS NULL
-     ORDER BY t.order_index ASC`
+     WHERE t.deleted_at IS NULL AND t.completed_at IS NULL AND t.parent_id IS NULL AND t.workspace_id = ?
+     ORDER BY t.order_index ASC`, [activeWorkspaceId]
   );
 
   // Query completed focus sessions today
@@ -37,9 +38,9 @@ export function FocusTimerView({ initialTaskId }: FocusTimerViewProps) {
     `SELECT fs.*, t.title as task_title 
      FROM focus_sessions fs 
      LEFT JOIN tasks t ON fs.task_id = t.id 
-     WHERE fs.started_at >= ? 
+     WHERE fs.started_at >= ? AND fs.workspace_id = ?
      ORDER BY fs.started_at DESC`,
-    [todayStr + 'T00:00:00.000Z']
+    [todayStr + 'T00:00:00.000Z', activeWorkspaceId]
   );
 
   // Selected Task
@@ -142,11 +143,12 @@ export function FocusTimerView({ initialTaskId }: FocusTimerViewProps) {
 
     try {
       await powersync.execute(
-        `INSERT INTO focus_sessions (id, user_id, task_id, duration_minutes, completed, started_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO focus_sessions (id, user_id, workspace_id, task_id, duration_minutes, completed, started_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           crypto.randomUUID(),
           'demo-user',
+          activeWorkspaceId,
           selectedTaskId || null,
           totalMinutes,
           1,

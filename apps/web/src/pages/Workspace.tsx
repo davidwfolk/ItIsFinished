@@ -1244,7 +1244,7 @@ export function Workspace() {
           />
         )}
                 {activeTab === 'calendar' ? (
-          <CalendarTimeGrid onTaskClick={(id: string) => setSelectedTaskId(id)} members={workspaceMembers} />
+          <CalendarTimeGrid onTaskClick={(id: string) => setSelectedTaskId(id)} members={workspaceMembers} activeWorkspaceId={activeWorkspaceId} />
         ) : activeTab === 'matrix' ? (
           <EisenhowerMatrixView
             tasks={tasks.map(t => ({
@@ -1264,11 +1264,11 @@ export function Workspace() {
             onDeleteTask={deleteTask}
           />
         ) : activeTab === 'analytics' ? (
-          <AnalyticsDashboard />
+          <AnalyticsDashboard activeWorkspaceId={activeWorkspaceId} />
         ) : activeTab === 'focus' ? (
-          <FocusTimerView initialTaskId={focusLinkedTaskId} />
+          <FocusTimerView initialTaskId={focusLinkedTaskId || undefined} activeWorkspaceId={activeWorkspaceId} />
         ) : activeTab === 'habits' ? (
-          <HabitsTrackerView />
+          <HabitsTrackerView activeWorkspaceId={activeWorkspaceId} />
         ) : (
           <>
             {/* Header */}

@@ -38,6 +38,7 @@ export interface InboxTask {
 export interface CalendarTimeGridProps {
   onTaskClick?: (taskId: string) => void;
   members: { id: string; name: string; color: string; role?: string }[];
+  activeWorkspaceId: string | null;
 }
 
 const HOURS = [
@@ -72,7 +73,7 @@ function formatDurationLabel(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function CalendarTimeGrid({ onTaskClick, members }: CalendarTimeGridProps) {
+export function CalendarTimeGrid({ onTaskClick, members, activeWorkspaceId }: CalendarTimeGridProps) {
   const powersync = usePowerSync();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'workweek' | 'fullweek'>('fullweek');
@@ -88,8 +89,8 @@ export function CalendarTimeGrid({ onTaskClick, members }: CalendarTimeGridProps
     `SELECT t.*, p.name as project_name, p.color as project_color 
      FROM tasks t 
      LEFT JOIN projects p ON t.project_id = p.id 
-     WHERE t.deleted_at IS NULL AND t.parent_id IS NULL
-     ORDER BY t.order_index ASC`
+     WHERE t.deleted_at IS NULL AND t.parent_id IS NULL AND t.workspace_id = ?
+     ORDER BY t.order_index ASC`, [activeWorkspaceId]
   );
 
   // Compute the days for the currently selected week
@@ -397,10 +398,11 @@ export function CalendarTimeGrid({ onTaskClick, members }: CalendarTimeGridProps
 
     try {
       await powersync.execute(
-        `INSERT INTO tasks (id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (id, workspace_id, project_id, title, priority, due_date, due_time, estimated_minutes, order_index, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           newId,
+          activeWorkspaceId,
           '00000000-0000-0000-0000-000000000000',
           newSlotTaskTitle.trim(),
           2,

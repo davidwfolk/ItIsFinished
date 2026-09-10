@@ -38,7 +38,7 @@ const CURATED_ICONS = [
   'Leaf', 'Zap', 'Star', 'CheckCircle', 'Smile', 'Compass'
 ];
 
-export function HabitsTrackerView() {
+export function HabitsTrackerView({ activeWorkspaceId }: { activeWorkspaceId?: string | null }) {
   const powersync = usePowerSync();
   const { user } = useAuth();
   
@@ -55,11 +55,11 @@ export function HabitsTrackerView() {
 
   // Fetch real data
   const { data: habits = [] } = useQuery<any>(
-    `SELECT * FROM habits WHERE deleted_at IS NULL ORDER BY created_at ASC`
+    `SELECT * FROM habits WHERE deleted_at IS NULL AND workspace_id = ? ORDER BY created_at ASC`, [activeWorkspaceId]
   );
   
   const { data: logs = [] } = useQuery<any>(
-    `SELECT * FROM habit_logs`
+    `SELECT * FROM habit_logs WHERE workspace_id = ?`, [activeWorkspaceId]
   );
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -110,9 +110,9 @@ export function HabitsTrackerView() {
       } else {
         const id = crypto.randomUUID();
         await powersync.execute(
-          `INSERT INTO habits (id, user_id, title, icon, color, frequency_type, target_count, is_archived, created_at, updated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-          [id, ownerId, formData.title.trim(), formData.icon, formData.color, 'daily', formData.target_count, now, now]
+          `INSERT INTO habits (id, user_id, workspace_id, title, icon, color, frequency_type, target_count, is_archived, created_at, updated_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          [id, ownerId, activeWorkspaceId, formData.title.trim(), formData.icon, formData.color, 'daily', formData.target_count, now, now]
         );
       }
       setIsModalOpen(false);
@@ -141,8 +141,8 @@ export function HabitsTrackerView() {
       if (currentVal === 0) {
         // Insert
         await powersync.execute(
-          `INSERT INTO habit_logs (habit_id, log_date, count, created_at) VALUES (?, ?, ?, ?)`,
-          [habitId, dateStr, newVal, new Date().toISOString()]
+          `INSERT INTO habit_logs (habit_id, workspace_id, log_date, count, created_at) VALUES (?, ?, ?, ?, ?)`,
+          [habitId, activeWorkspaceId, dateStr, newVal, new Date().toISOString()]
         );
       } else if (newVal === 0) {
         // Delete
