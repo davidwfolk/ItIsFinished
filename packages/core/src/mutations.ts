@@ -8,13 +8,12 @@ import { TaskRow } from './types/database';
 // ZOD SCHEMAS FOR BOUNDARY VALIDATION
 // ----------------------------------------------------------------------------
 const UUID_NULLABLE = z.string().uuid().nullable().optional();
-const UUID_DEFAULT = z.string().uuid().default(() => '00000000-0000-0000-0000-000000000000');
 
 export const CreateTaskSchema = z.object({
   id: z.string().uuid(),
   workspace_id: z.string().uuid(),
   title: z.string().min(1).max(255),
-  project_id: UUID_DEFAULT,
+  project_id: UUID_NULLABLE, // null/undefined = Inbox (tasks.project_id is nullable)
   section_id: UUID_NULLABLE,
   priority: z.number().int().min(1).max(4).default(4),
   due_date: z.string().nullable().optional(),
@@ -95,7 +94,7 @@ export async function createTask(
     `INSERT INTO tasks (id, workspace_id, project_id, section_id, title, priority, due_date, due_time, estimated_minutes, recurrence_rule, order_index, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'todo', ?, ?)`,
     [
-      data.id, data.workspace_id, data.project_id, data.section_id || null, data.title, data.priority,
+      data.id, data.workspace_id, data.project_id || null, data.section_id || null, data.title, data.priority,
       data.due_date || null, data.due_time || null, data.estimated_minutes || null, data.recurrence_rule || null,
       data.order_index, now, now
     ]
@@ -159,7 +158,7 @@ export async function toggleTask(db: AbstractPowerSyncDatabase, workspaceId: str
       [
         nextId,
         workspaceId,
-        task.project_id || '00000000-0000-0000-0000-000000000000',
+        task.project_id ?? null,
         task.title,
         task.priority,
         next.nextDueDate,

@@ -71,10 +71,20 @@ export function useAuth(): UseAuthReturn {
 
   const signOut = useCallback(async () => {
     try {
+      const { powersync } = await import('../lib/powersync');
+
+      // Don't silently destroy edits that haven't reached the server yet.
+      const pending = await powersync.getCrudBatch(1);
+      if (pending && pending.crud.length > 0) {
+        const proceed = window.confirm(
+          'Some recent changes have not finished syncing. Signing out now will discard them. Sign out anyway?'
+        );
+        if (!proceed) return;
+      }
+
+      // Wipe the local database so the next user on this device can't see this user's data.
+      await powersync.disconnectAndClear();
       await authManager.signOut();
-      import('../lib/powersync').then(({ powersync }) => {
-        powersync.disconnect();
-      });
       setUser(null);
       setSession(null);
       setMfaFactors([]);

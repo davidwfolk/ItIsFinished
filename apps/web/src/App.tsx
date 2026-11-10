@@ -6,14 +6,11 @@ import { LandingPage } from './components/LandingPage';
 import { useAuth } from './hooks/useAuth';
 import { powersync, connector } from './lib/powersync';
 
-let connectionInitiated = false;
-
+// Mounted only while a user is signed in (inside ProtectedRoute), so every sign-in
+// re-establishes sync. Sign-out calls disconnectAndClear() in useAuth.
 function PowerSyncManager() {
   useEffect(() => {
-    if (!connectionInitiated) {
-      connectionInitiated = true;
-      powersync.connect(connector).catch(console.error);
-    }
+    powersync.connect(connector).catch(console.error);
   }, []);
   return null;
 }

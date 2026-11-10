@@ -2,9 +2,17 @@ import { PowerSyncDatabase } from '@powersync/web';
 import { AppSchema, SupabasePowerSyncConnector } from '@app/core';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://hyrffgsjmobdffpgoalw.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key';
-const POWERSYNC_URL = import.meta.env.VITE_POWERSYNC_URL || 'https://6a9356a28453e7cf8332b2a9.powersync.journeyapps.com';
+function requireEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_ANON_KEY' | 'VITE_POWERSYNC_URL'): string {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(`Missing ${name}. Copy .env.example to .env and fill it in.`);
+  }
+  return value;
+}
+
+const SUPABASE_URL = requireEnv('VITE_SUPABASE_URL');
+const SUPABASE_ANON_KEY = requireEnv('VITE_SUPABASE_ANON_KEY');
+const POWERSYNC_URL = requireEnv('VITE_POWERSYNC_URL');
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
